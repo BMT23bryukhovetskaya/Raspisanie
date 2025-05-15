@@ -1,0 +1,742 @@
+import sys
+import json
+import os
+from datetime import datetime
+from PyQt6.QtWidgets import (
+    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
+    QLabel, QPushButton, QTableWidget, QTableWidgetItem, QStackedWidget,
+    QTimeEdit, QLineEdit, QComboBox, QMessageBox, QHeaderView,
+    QAbstractItemView, QScrollArea, QSizePolicy, QSpacerItem, QToolBar,
+    QStatusBar, QMenuBar, QMenu, QFileDialog, QInputDialog, QTextEdit
+)
+from PyQt6.QtCore import Qt, QSize, QTimer, QTime, QPropertyAnimation, QEasingCurve
+from PyQt6.QtGui import (
+    QFont, QColor, QPalette, QIcon, QPixmap, QAction,
+    QPainter, QBrush, QLinearGradient
+)
+
+class ExcelStyleTable(QTableWidget):
+    def __init__(self):
+        super().__init__()
+        self.setup_ui()
+    
+    def setup_ui(self):
+        self.setStyleSheet("""
+            QTableWidget {
+                background-color: white;
+                border: 1px solid #E0E0E0;
+                gridline-color: #E0E0E0;
+            }
+            QHeaderView::section {
+                background-color: #F5F5F5;
+                padding: 8px;
+                border: none;
+                font-weight: 500;
+                color: #333333;
+            }
+            QTableWidget::item {
+                padding: 8px;
+                border-right: 1px solid #E0E0E0;
+                border-bottom: 1px solid #E0E0E0;
+            }
+            QTableWidget::item:selected {
+                background-color: #E3F2FD;
+                color: #1976D2;
+            }
+        """)
+        
+        self.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.verticalHeader().setVisible(False)
+        self.setAlternatingRowColors(True)
+        self.horizontalHeader().setHighlightSections(False)
+        self.horizontalHeader().setDefaultAlignment(Qt.AlignmentFlag.AlignLeft)
+        self.setSortingEnabled(True)
+
+class ModernButton(QPushButton):
+    def __init__(self, text, icon=None, parent=None):
+        super().__init__(text, parent)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setFixedHeight(36)
+        self.setMinimumWidth(36 if not text else 100)
+        
+        self.setStyleSheet("""
+            QPushButton {
+                background-color: #1976D2;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 6px;
+                font-size: 12px;
+                font-weight: 500;
+                min-width: 36px;
+            }
+            QPushButton:hover {
+                background-color: #2196F3;
+            }
+            QPushButton:pressed {
+                background-color: #0D47A1;
+            }
+            QPushButton:disabled {
+                background-color: #BBDEFB;
+            }
+        """)
+        
+        if icon:
+            self.setIcon(QIcon(icon))
+            self.setIconSize(QSize(16, 16))
+        
+        self.animation = QPropertyAnimation(self, b"geometry")
+        self.animation.setDuration(120)
+        self.animation.setEasingCurve(QEasingCurve.Type.OutQuad)
+    
+    def enterEvent(self, event):
+        self.animation.stop()
+        self.animation.setStartValue(self.geometry())
+        self.animation.setEndValue(self.geometry().adjusted(-1, -1, 1, 1))
+        self.animation.start()
+        super().enterEvent(event)
+        
+    def leaveEvent(self, event):
+        self.animation.stop()
+        self.animation.setStartValue(self.geometry())
+        self.animation.setEndValue(self.geometry().adjusted(1, 1, -1, -1))
+        self.animation.start()
+        super().leaveEvent(event)
+
+class ScheduleApp(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Расписание колледжа")
+        self.setGeometry(100, 100, 1400, 800)
+        self.setMinimumSize(QSize(1100, 600))
+        
+        # Инициализация данных
+        self.schedule_data = self.load_data()
+        self.groups = self.load_groups()
+        
+        # Создание интерфейса
+        self.create_menu()
+        self.create_toolbar()
+        self.init_ui()
+        
+        # Таймер для обновления времени
+        self.time_timer = QTimer(self)
+        self.time_timer.timeout.connect(self.update_current_time)
+        self.time_timer.start(1000)
+        
+        # Первоначальное обновление
+        self.update_schedule_table()
+    
+    def load_groups(self):
+        try:
+            if os.path.exists("groups.json"):
+                with open("groups.json", "r", encoding="utf-8") as f:
+                    groups = json.load(f)
+                    return groups if isinstance(groups, list) else []
+        except Exception:
+            return []
+        return []
+    
+    def save_groups(self):
+        try:
+            with open("groups.json", "w", encoding="utf-8") as f:
+                json.dump(self.groups, f, ensure_ascii=False, indent=2)
+            return True
+        except Exception:
+            return False
+    
+    def create_menu(self):
+        menubar = self.menuBar()
+        
+        # Меню Файл
+        file_menu = menubar.addMenu("Файл")
+        
+        new_action = QAction("Новый", self)
+        new_action.triggered.connect(self.new_schedule)
+        file_menu.addAction(new_action)
+        
+        open_action = QAction("Открыть...", self)
+        open_action.triggered.connect(self.open_schedule)
+        file_menu.addAction(open_action)
+        
+        save_action = QAction("Сохранить", self)
+        save_action.triggered.connect(self.save_data)
+        file_menu.addAction(save_action)
+        
+        export_action = QAction("Экспорт...", self)
+        export_action.triggered.connect(self.export_schedule)
+        file_menu.addAction(export_action)
+        
+        file_menu.addSeparator()
+        
+        exit_action = QAction("Выход", self)
+        exit_action.triggered.connect(self.close)
+        file_menu.addAction(exit_action)
+        
+        # Меню Правка
+        edit_menu = menubar.addMenu("Правка")
+        
+        add_action = QAction("Добавить занятия", self)
+        add_action.triggered.connect(lambda: self.stacked_widget.setCurrentIndex(1))
+        edit_menu.addAction(add_action)
+        
+        remove_action = QAction("Удалить выделенное", self)
+        remove_action.triggered.connect(self.remove_selected)
+        edit_menu.addAction(remove_action)
+        
+        # Меню Группы
+        group_menu = menubar.addMenu("Группы")
+        
+        add_group_action = QAction("Добавить группу...", self)
+        add_group_action.triggered.connect(self.add_group_dialog)
+        group_menu.addAction(add_group_action)
+        
+        manage_groups_action = QAction("Управление группами...", self)
+        manage_groups_action.triggered.connect(self.manage_groups_dialog)
+        group_menu.addAction(manage_groups_action)
+    
+    def add_group_dialog(self):
+        group, ok = QInputDialog.getText(
+            self, "Добавить группу", 
+            "Введите название группы:",
+            QLineEdit.EchoMode.Normal,
+            ""
+        )
+        
+        if ok and group:
+            if group not in self.groups:
+                self.groups.append(group)
+                self.save_groups()
+                self.update_group_combos()
+                self.show_message("Успех", f"Группа '{group}' добавлена", QMessageBox.Icon.Information)
+            else:
+                self.show_message("Ошибка", "Такая группа уже существует", QMessageBox.Icon.Warning)
+    
+    def manage_groups_dialog(self):
+        if not self.groups:
+            self.show_message("Информация", "Нет групп для управления", QMessageBox.Icon.Information)
+            return
+        
+        group, ok = QInputDialog.getItem(
+            self, "Управление группами",
+            "Выберите группу для удаления:",
+            self.groups, 0, False
+        )
+        
+        if ok and group:
+            reply = QMessageBox.question(
+                self, "Подтверждение",
+                f"Вы уверены, что хотите удалить группу '{group}'?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            )
+            
+            if reply == QMessageBox.StandardButton.Yes:
+                self.groups.remove(group)
+                self.save_groups()
+                self.update_group_combos()
+                
+                # Удаляем занятия этой группы
+                for day in self.schedule_data:
+                    self.schedule_data[day] = [lesson for lesson in self.schedule_data[day] if lesson.get('group') != group]
+                
+                self.save_data()
+                self.update_schedule_table()
+                self.show_message("Успех", f"Группа '{group}' удалена", QMessageBox.Icon.Information)
+    
+    def update_group_combos(self):
+        if hasattr(self, 'group_combo'):
+            current = self.group_combo.currentText()
+            self.group_combo.clear()
+            self.group_combo.addItems(self.groups)
+            if current in self.groups:
+                self.group_combo.setCurrentText(current)
+        
+        if hasattr(self, 'quick_group_combo'):
+            current = self.quick_group_combo.currentText()
+            self.quick_group_combo.clear()
+            self.quick_group_combo.addItems(self.groups)
+            if current in self.groups:
+                self.quick_group_combo.setCurrentText(current)
+    
+    def create_toolbar(self):
+        toolbar = QToolBar("Панель инструментов")
+        toolbar.setMovable(False)
+        toolbar.setIconSize(QSize(20, 20))
+        self.addToolBar(toolbar)
+        
+        self.add_button = QAction(QIcon.fromTheme("list-add"), "Добавить", self)
+        self.add_button.triggered.connect(lambda: self.stacked_widget.setCurrentIndex(1))
+        toolbar.addAction(self.add_button)
+        
+        self.remove_button = QAction(QIcon.fromTheme("list-remove"), "Удалить", self)
+        self.remove_button.triggered.connect(self.remove_selected)
+        toolbar.addAction(self.remove_button)
+        
+        toolbar.addSeparator()
+        
+        self.refresh_button = QAction(QIcon.fromTheme("view-refresh"), "Обновить", self)
+        self.refresh_button.triggered.connect(self.update_schedule_table)
+        toolbar.addAction(self.refresh_button)
+        
+        toolbar.addSeparator()
+        
+        self.settings_button = QAction(QIcon.fromTheme("preferences-system"), "Настройки", self)
+        self.settings_button.triggered.connect(lambda: self.stacked_widget.setCurrentIndex(2))
+        toolbar.addAction(self.settings_button)
+        
+        toolbar.addSeparator()
+        
+        self.add_group_button = QAction(QIcon.fromTheme("list-add"), "Добавить группу", self)
+        self.add_group_button.triggered.connect(self.add_group_dialog)
+        toolbar.addAction(self.add_group_button)
+    
+    def init_ui(self):
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+        
+        main_layout = QVBoxLayout(central_widget)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+        
+        self.stacked_widget = QStackedWidget()
+        
+        self.create_schedule_page()
+        self.create_add_page()
+        self.create_settings_page()
+        
+        main_layout.addWidget(self.stacked_widget)
+        
+        self.status_bar = QStatusBar()
+        self.setStatusBar(self.status_bar)
+        self.current_time_label = QLabel()
+        self.status_bar.addPermanentWidget(self.current_time_label)
+    
+    def create_schedule_page(self):
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(12)
+        
+        # Таблица расписания
+        self.schedule_table = ExcelStyleTable()
+        self.schedule_table.setColumnCount(6)
+        self.schedule_table.setHorizontalHeaderLabels(["День недели", "Время", "Группа", "Предмет", "Кабинет", "Преподаватель"])
+        
+        # Настройка растягивания колонок
+        self.schedule_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        self.schedule_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        self.schedule_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        self.schedule_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
+        self.schedule_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        self.schedule_table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeMode.Stretch)
+        
+        layout.addWidget(self.schedule_table)
+        
+        # Панель быстрого добавления
+        quick_add_panel = QWidget()
+        quick_add_layout = QHBoxLayout(quick_add_panel)
+        quick_add_layout.setContentsMargins(0, 0, 0, 0)
+        
+        self.quick_day_combo = QComboBox()
+        self.quick_day_combo.addItems(["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота"])
+        
+        self.quick_group_combo = QComboBox()
+        self.quick_group_combo.addItems(self.groups)
+        
+        self.quick_time_edit = QTimeEdit()
+        self.quick_time_edit.setDisplayFormat("HH:mm")
+        self.quick_time_edit.setTime(QTime(9, 0))
+        
+        self.quick_room_input = QLineEdit()
+        self.quick_room_input.setPlaceholderText("Кабинет")
+        
+        self.quick_teacher_input = QLineEdit()
+        self.quick_teacher_input.setPlaceholderText("Преподаватель")
+        
+        self.quick_add_btn = ModernButton("+", parent=self)
+        self.quick_add_btn.setToolTip("Добавить занятие")
+        self.quick_add_btn.clicked.connect(self.quick_add_lesson)
+        
+        quick_add_layout.addWidget(QLabel("День:"))
+        quick_add_layout.addWidget(self.quick_day_combo)
+        quick_add_layout.addWidget(QLabel("Группа:"))
+        quick_add_layout.addWidget(self.quick_group_combo)
+        quick_add_layout.addWidget(QLabel("Время:"))
+        quick_add_layout.addWidget(self.quick_time_edit)
+        quick_add_layout.addWidget(QLabel("Кабинет:"))
+        quick_add_layout.addWidget(self.quick_room_input)
+        quick_add_layout.addWidget(QLabel("Преподаватель:"))
+        quick_add_layout.addWidget(self.quick_teacher_input)
+        quick_add_layout.addWidget(self.quick_add_btn)
+        
+        layout.addWidget(quick_add_panel)
+        
+        self.stacked_widget.addWidget(page)
+    
+    def quick_add_lesson(self):
+        day = self.quick_day_combo.currentText()
+        group = self.quick_group_combo.currentText()
+        room = self.quick_room_input.text().strip()
+        teacher = self.quick_teacher_input.text().strip()
+        time = self.quick_time_edit.time().toString("HH:mm")
+        
+        new_item = {
+            "group": group,
+            "subject": "",  # Будет заполнено в форме множественного добавления
+            "teacher": teacher,
+            "room": room,
+            "start": time,
+            "end": ""
+        }
+        
+        # Переходим на страницу добавления с предзаполненными данными
+        self.stacked_widget.setCurrentIndex(1)
+        self.day_combo.setCurrentText(day)
+        self.group_combo.setCurrentText(group)
+        self.start_time.setTime(self.quick_time_edit.time())
+        self.end_time.setTime(self.quick_time_edit.time().addSecs(5400))  # +1.5 часа
+        self.room_input.setText(room)
+        self.teacher_input.setText(teacher)
+        self.subject_input.setFocus()
+    
+    def create_add_page(self):
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(24, 24, 24, 24)
+        layout.setSpacing(16)
+        
+        title = QLabel("Добавить несколько занятий")
+        title.setStyleSheet("font-size: 18px; font-weight: 500; color: #333333;")
+        
+        # Форма
+        form = QWidget()
+        form_layout = QVBoxLayout(form)
+        form_layout.setContentsMargins(16, 16, 16, 16)
+        form_layout.setSpacing(12)
+        form.setStyleSheet("background-color: white; border-radius: 8px;")
+        
+        # Основные поля
+        self.day_combo = QComboBox()
+        self.day_combo.addItems(["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота"])
+        
+        self.group_combo = QComboBox()
+        self.group_combo.addItems(self.groups)
+        
+        time_layout = QHBoxLayout()
+        time_layout.setSpacing(8)
+        
+        self.start_time = QTimeEdit()
+        self.start_time.setDisplayFormat("HH:mm")
+        self.start_time.setTime(QTime(9, 0))
+        
+        self.end_time = QTimeEdit()
+        self.end_time.setDisplayFormat("HH:mm")
+        self.end_time.setTime(QTime(10, 30))
+        
+        time_layout.addWidget(QLabel("Время:"))
+        time_layout.addWidget(self.start_time)
+        time_layout.addWidget(QLabel("—"))
+        time_layout.addWidget(self.end_time)
+        time_layout.addStretch()
+        
+        self.room_input = QLineEdit()
+        self.room_input.setPlaceholderText("Кабинет")
+        
+        self.teacher_input = QLineEdit()
+        self.teacher_input.setPlaceholderText("Преподаватель")
+        
+        # Поле для ввода нескольких предметов
+        self.subjects_input = QTextEdit()
+        self.subjects_input.setPlaceholderText("Введите названия предметов, каждое с новой строки\nНапример:\nМатематика\nФизика\nХимия")
+        self.subjects_input.setMaximumHeight(150)
+        
+        # Кнопки
+        button_layout = QHBoxLayout()
+        button_layout.setSpacing(8)
+        
+        self.add_btn = ModernButton("Добавить все")
+        self.add_btn.clicked.connect(self.add_multiple_lessons)
+        
+        self.cancel_btn = ModernButton("Отмена")
+        self.cancel_btn.clicked.connect(lambda: self.stacked_widget.setCurrentIndex(0))
+        
+        button_layout.addStretch()
+        button_layout.addWidget(self.cancel_btn)
+        button_layout.addWidget(self.add_btn)
+        
+        # Добавление элементов
+        form_layout.addWidget(QLabel("День недели:"))
+        form_layout.addWidget(self.day_combo)
+        form_layout.addWidget(QLabel("Группа:"))
+        form_layout.addWidget(self.group_combo)
+        form_layout.addLayout(time_layout)
+        form_layout.addWidget(QLabel("Кабинет:"))
+        form_layout.addWidget(self.room_input)
+        form_layout.addWidget(QLabel("Преподаватель:"))
+        form_layout.addWidget(self.teacher_input)
+        form_layout.addWidget(QLabel("Предметы (по одному на строку):"))
+        form_layout.addWidget(self.subjects_input)
+        form_layout.addSpacing(16)
+        form_layout.addLayout(button_layout)
+        
+        # Добавление на страницу
+        layout.addWidget(title)
+        layout.addWidget(form)
+        layout.addStretch()
+        
+        self.stacked_widget.addWidget(page)
+    
+    def add_multiple_lessons(self):
+        day = self.day_combo.currentText()
+        group = self.group_combo.currentText()
+        room = self.room_input.text().strip()
+        teacher = self.teacher_input.text().strip()
+        start = self.start_time.time().toString("HH:mm")
+        end = self.end_time.time().toString("HH:mm")
+        
+        subjects_text = self.subjects_input.toPlainText().strip()
+        if not subjects_text:
+            self.show_message("Ошибка", "Введите хотя бы один предмет", QMessageBox.Icon.Warning)
+            return
+        
+        if QTime.fromString(start, "HH:mm") >= QTime.fromString(end, "HH:mm"):
+            self.show_message("Ошибка", "Время окончания должно быть позже времени начала", QMessageBox.Icon.Warning)
+            return
+        
+        subjects = [s.strip() for s in subjects_text.split('\n') if s.strip()]
+        added_count = 0
+        
+        for subject in subjects:
+            new_item = {
+                "group": group,
+                "subject": subject,
+                "teacher": teacher,
+                "room": room,
+                "start": start,
+                "end": end
+            }
+            
+            self.schedule_data[day].append(new_item)
+            added_count += 1
+        
+        # Сортируем занятия по времени
+        self.schedule_data[day].sort(key=lambda x: x["start"])
+        
+        if self.save_data():
+            self.subjects_input.clear()
+            self.show_message("Успех", f"Добавлено {added_count} занятий", QMessageBox.Icon.Information)
+            self.update_schedule_table()
+            self.stacked_widget.setCurrentIndex(0)
+    
+    def create_settings_page(self):
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(24, 24, 24, 24)
+        layout.setSpacing(16)
+        
+        title = QLabel("Настройки")
+        title.setStyleSheet("font-size: 18px; font-weight: 500; color: #333333;")
+        
+        form = QWidget()
+        form_layout = QVBoxLayout(form)
+        form_layout.setContentsMargins(16, 16, 16, 16)
+        form_layout.setSpacing(12)
+        form.setStyleSheet("background-color: white; border-radius: 8px;")
+        
+        self.theme_combo = QComboBox()
+        self.theme_combo.addItems(["Светлая", "Темная", "Системная"])
+        
+        button_layout = QHBoxLayout()
+        button_layout.setSpacing(8)
+        
+        self.save_btn = ModernButton("Сохранить")
+        self.save_btn.clicked.connect(self.save_settings)
+        
+        self.cancel_btn = ModernButton("Отмена")
+        self.cancel_btn.clicked.connect(lambda: self.stacked_widget.setCurrentIndex(0))
+        
+        button_layout.addStretch()
+        button_layout.addWidget(self.cancel_btn)
+        button_layout.addWidget(self.save_btn)
+        
+        form_layout.addWidget(QLabel("Цветовая тема:"))
+        form_layout.addWidget(self.theme_combo)
+        form_layout.addSpacing(16)
+        form_layout.addLayout(button_layout)
+        
+        layout.addWidget(title)
+        layout.addWidget(form)
+        layout.addStretch()
+        
+        self.stacked_widget.addWidget(page)
+    
+    def update_current_time(self):
+        now = datetime.now()
+        day_name = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"][now.weekday()]
+        self.current_time_label.setText(f"{day_name}, {now.strftime('%d.%m.%Y %H:%M')}")
+    
+    def load_data(self):
+        try:
+            if os.path.exists("schedule.json"):
+                with open("schedule.json", "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    if isinstance(data, dict):
+                        # Добавляем поле group если его нет (для совместимости)
+                        for day in data:
+                            for lesson in data[day]:
+                                if 'group' not in lesson:
+                                    lesson['group'] = ""
+                        return data
+        except Exception as e:
+            self.show_message("Ошибка загрузки", f"Не удалось загрузить данные: {str(e)}", QMessageBox.Icon.Critical)
+        
+        return {
+            "Понедельник": [], "Вторник": [], "Среда": [],
+            "Четверг": [], "Пятница": [], "Суббота": []
+        }
+    
+    def save_data(self):
+        try:
+            with open("schedule.json", "w", encoding="utf-8") as f:
+                json.dump(self.schedule_data, f, ensure_ascii=False, indent=2)
+            return True
+        except Exception as e:
+            self.show_message("Ошибка сохранения", f"Не удалось сохранить данные: {str(e)}", QMessageBox.Icon.Critical)
+            return False
+    
+    def update_schedule_table(self):
+        self.schedule_table.setRowCount(0)
+        
+        row = 0
+        for day, lessons in self.schedule_data.items():
+            for lesson in lessons:
+                self.schedule_table.insertRow(row)
+                self.schedule_table.setItem(row, 0, QTableWidgetItem(day))
+                self.schedule_table.setItem(row, 1, QTableWidgetItem(
+                    f"{lesson['start']} - {lesson['end']}" if lesson.get('end') else lesson['start']
+                ))
+                self.schedule_table.setItem(row, 2, QTableWidgetItem(lesson.get('group', '')))
+                self.schedule_table.setItem(row, 3, QTableWidgetItem(lesson['subject']))
+                self.schedule_table.setItem(row, 4, QTableWidgetItem(lesson['room']))
+                self.schedule_table.setItem(row, 5, QTableWidgetItem(lesson['teacher']))
+                row += 1
+    
+    def remove_selected(self):
+        selected = self.schedule_table.currentRow()
+        if selected == -1:
+            self.show_message("Ошибка", "Выберите занятие для удаления", QMessageBox.Icon.Warning)
+            return
+        
+        day_item = self.schedule_table.item(selected, 0)
+        if not day_item:
+            return
+        
+        day = day_item.text()
+        time_item = self.schedule_table.item(selected, 1)
+        subject_item = self.schedule_table.item(selected, 3)
+        
+        if not all([day_item, time_item, subject_item]):
+            return
+        
+        # Поиск и удаление занятия
+        for i, lesson in enumerate(self.schedule_data[day]):
+            if (lesson['subject'] == subject_item.text() and 
+                (f"{lesson['start']} - {lesson['end']}" == time_item.text() or 
+                 lesson['start'] == time_item.text())):
+                del self.schedule_data[day][i]
+                break
+        
+        if self.save_data():
+            self.update_schedule_table()
+            self.show_message("Успех", "Занятие удалено", QMessageBox.Icon.Information)
+    
+    def new_schedule(self):
+        reply = QMessageBox.question(
+            self, "Новое расписание", 
+            "Вы уверены, что хотите создать новое расписание? Текущие данные будут потеряны.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            self.schedule_data = {
+                "Понедельник": [], "Вторник": [], "Среда": [],
+                "Четверг": [], "Пятница": [], "Суббота": []
+            }
+            self.save_data()
+            self.update_schedule_table()
+    
+    def open_schedule(self):
+        file_name, _ = QFileDialog.getOpenFileName(
+            self, "Открыть файл расписания", 
+            "", "JSON Files (*.json)"
+        )
+        
+        if file_name:
+            try:
+                with open(file_name, "r", encoding="utf-8") as f:
+                    new_data = json.load(f)
+                
+                if isinstance(new_data, dict):
+                    self.schedule_data = new_data
+                    self.save_data()
+                    self.update_schedule_table()
+                    self.show_message("Успех", "Расписание загружено", QMessageBox.Icon.Information)
+                else:
+                    self.show_message("Ошибка", "Некорректный формат данных", QMessageBox.Icon.Critical)
+            except Exception as e:
+                self.show_message("Ошибка", f"Не удалось загрузить файл: {str(e)}", QMessageBox.Icon.Critical)
+    
+    def export_schedule(self):
+        file_name, _ = QFileDialog.getSaveFileName(
+            self, "Экспорт расписания", 
+            "расписание.json", "JSON Files (*.json)"
+        )
+        
+        if file_name:
+            try:
+                with open(file_name, "w", encoding="utf-8") as f:
+                    json.dump(self.schedule_data, f, ensure_ascii=False, indent=2)
+                self.show_message("Успех", "Расписание экспортировано", QMessageBox.Icon.Information)
+            except Exception as e:
+                self.show_message("Ошибка", f"Не удалось экспортировать: {str(e)}", QMessageBox.Icon.Critical)
+    
+    def save_settings(self):
+        theme = self.theme_combo.currentText()
+        self.show_message("Сохранено", "Настройки применены", QMessageBox.Icon.Information)
+        self.stacked_widget.setCurrentIndex(0)
+    
+    def show_message(self, title, message, icon):
+        msg = QMessageBox(self)
+        msg.setWindowTitle(title)
+        msg.setText(message)
+        msg.setIcon(icon)
+        msg.exec()
+
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    
+    app.setStyle("Fusion")
+    
+    palette = app.palette()
+    palette.setColor(QPalette.ColorRole.Window, QColor(240, 240, 240))
+    palette.setColor(QPalette.ColorRole.WindowText, QColor(0, 0, 0))
+    palette.setColor(QPalette.ColorRole.Base, QColor(255, 255, 255))
+    palette.setColor(QPalette.ColorRole.AlternateBase, QColor(240, 240, 240))
+    palette.setColor(QPalette.ColorRole.ToolTipBase, QColor(255, 255, 255))
+    palette.setColor(QPalette.ColorRole.ToolTipText, QColor(0, 0, 0))
+    palette.setColor(QPalette.ColorRole.Text, QColor(0, 0, 0))
+    palette.setColor(QPalette.ColorRole.Button, QColor(240, 240, 240))
+    palette.setColor(QPalette.ColorRole.ButtonText, QColor(0, 0, 0))
+    palette.setColor(QPalette.ColorRole.Highlight, QColor(25, 118, 210))
+    palette.setColor(QPalette.ColorRole.HighlightedText, QColor(255, 255, 255))
+    app.setPalette(palette)
+    
+    font = QFont("Segoe UI", 10)
+    app.setFont(font)
+    
+    window = ScheduleApp()
+    window.show()
+    
+    sys.exit(app.exec())
