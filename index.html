@@ -31,7 +31,7 @@
             background-color: #f5f7fa;
             background-image: linear-gradient(135deg, #f5f7fa 0%, #e4e8eb 100%);
             min-height: 100vh;
-            padding-top: 80px; /* Для фиксированного хедера */
+            padding-top: 80px;
         }
 
         a {
@@ -185,7 +185,7 @@
             box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.2);
         }
 
-        /* New Schedule Table */
+        /* Schedule Table */
         .schedule-container {
             background-color: var(--card-bg);
             border-radius: var(--border-radius);
@@ -194,14 +194,12 @@
             margin-bottom: 2rem;
         }
 
-        .schedule-days {
-            display: grid;
-            grid-template-columns: 120px repeat(6, 1fr); /* 6 дней недели */
-            gap: 1px;
-            background-color: #ddd;
+        .schedule-table {
+            width: 100%;
+            border-collapse: collapse;
         }
 
-        .schedule-header {
+        .schedule-table th {
             background-color: var(--primary);
             color: white;
             padding: 1rem;
@@ -209,21 +207,18 @@
             font-weight: 500;
         }
 
-        .schedule-time {
+        .schedule-table td {
             background-color: white;
             padding: 1rem;
-            text-align: center;
-            font-weight: 500;
-            color: var(--primary);
-            border-right: 1px solid #eee;
+            border: 1px solid #eee;
+            vertical-align: top;
         }
 
-        .schedule-cell {
-            background-color: white;
-            padding: 1rem;
-            min-height: 80px;
-            border-right: 1px solid #eee;
-            border-bottom: 1px solid #eee;
+        .schedule-time {
+            font-weight: 500;
+            color: var(--primary);
+            text-align: center;
+            white-space: nowrap;
         }
 
         .current-day {
@@ -266,11 +261,8 @@
         }
 
         .empty-cell {
-            display: flex;
-            align-items: center;
-            justify-content: center;
             color: #bdc3c7;
-            font-size: 0.9rem;
+            text-align: center;
         }
 
         /* Footer */
@@ -338,12 +330,6 @@
         }
 
         /* Responsive */
-        @media (max-width: 992px) {
-            .schedule-days {
-                grid-template-columns: 100px repeat(6, 1fr);
-            }
-        }
-
         @media (max-width: 768px) {
             .nav-toggle {
                 display: block;
@@ -380,21 +366,12 @@
                 display: none;
             }
 
-            .schedule-days {
-                display: block;
+            .schedule-container {
                 overflow-x: auto;
-                white-space: nowrap;
             }
 
-            .schedule-header, .schedule-time, .schedule-cell {
-                display: inline-block;
-                vertical-align: top;
-                min-width: 200px;
-                white-space: normal;
-            }
-
-            .schedule-time {
-                width: 100px;
+            .schedule-table {
+                min-width: 700px;
             }
         }
 
@@ -446,24 +423,27 @@
                 <div class="group-selector">
                     <select id="group">
                         <option value="">Выберите группу</option>
-                        <!-- Группы будут заполнены из файла raspisanie.txt -->
                     </select>
                 </div>
             </div>
 
             <div class="schedule-container">
-                <div class="schedule-days">
-                    <!-- Time column -->
-                    <div class="schedule-header">Время</div>
-                    <div class="schedule-header">Понедельник</div>
-                    <div class="schedule-header">Вторник</div>
-                    <div class="schedule-header">Среда</div>
-                    <div class="schedule-header">Четверг</div>
-                    <div class="schedule-header">Пятница</div>
-                    <div class="schedule-header">Суббота</div>
-
-                    <!-- Расписание будет заполнено динамически -->
-                </div>
+                <table class="schedule-table">
+                    <thead>
+                        <tr>
+                            <th>Время</th>
+                            <th>Понедельник</th>
+                            <th>Вторник</th>
+                            <th>Среда</th>
+                            <th>Четверг</th>
+                            <th>Пятница</th>
+                            <th>Суббота</th>
+                        </tr>
+                    </thead>
+                    <tbody id="schedule-body">
+                        <!-- Расписание будет заполнено динамически -->
+                    </tbody>
+                </table>
             </div>
         </div>
     </main>
@@ -491,263 +471,204 @@
             nav.classList.toggle('active');
         });
 
-        // Парсинг файла с расписанием
-        let scheduleData = {};
-        let groups = new Set();
-        let allTimeSlots = new Set();
+        // Основной объект для хранения расписания
+        const scheduleData = {
+            groups: new Set(),
+            days: ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота'],
+            timeSlots: new Set(),
+            lessons: {}
+        };
 
-        // Функция для загрузки и парсинга файла с расписанием
+        // Загрузка и парсинг расписания
         async function loadSchedule() {
             try {
                 const response = await fetch('raspisanie.txt');
+                if (!response.ok) throw new Error('Файл не найден');
                 const text = await response.text();
                 parseSchedule(text);
                 updateGroupSelector();
-                
-                // Показываем расписание для первой группы, если она есть
-                if (groups.size > 0) {
-                    const firstGroup = Array.from(groups)[0];
-                    document.getElementById('group').value = firstGroup;
-                    displayScheduleForGroup(firstGroup);
-                }
+                displaySchedule();
             } catch (error) {
-                console.error('Ошибка загрузки расписания:', error);
-                // Если файл не загружается, используем тестовые данные
-                const testData = `=== ПОНЕДЕЛЬНИК ===
+                console.error('Ошибка загрузки:', error);
+                loadFallbackData();
+            }
+        }
 
+        // Парсинг текста расписания
+        function parseSchedule(text) {
+            const dayBlocks = text.split(/=== ([^=]+) ===/).slice(1);
+            
+            for (let i = 0; i < dayBlocks.length; i += 2) {
+                const dayName = dayBlocks[i].trim();
+                const content = dayBlocks[i+1];
+                
+                if (!scheduleData.days.includes(dayName)) continue;
+                
+                const groupSections = content.split(/Группа:\s*(.+)/).slice(1);
+                
+                for (let j = 0; j < groupSections.length; j += 2) {
+                    const groupName = groupSections[j].trim();
+                    const lessonsText = groupSections[j+1];
+                    
+                    if (!groupName) continue;
+                    
+                    scheduleData.groups.add(groupName);
+                    
+                    if (!scheduleData.lessons[groupName]) {
+                        scheduleData.lessons[groupName] = {};
+                    }
+                    
+                    const lessons = lessonsText.trim().split('\n')
+                        .filter(line => line.includes('|'))
+                        .map(line => {
+                            const [time, subject, room, teacher] = line.split('|').map(s => s.trim());
+                            scheduleData.timeSlots.add(time);
+                            return { time, subject, room, teacher };
+                        });
+                    
+                    scheduleData.lessons[groupName][dayName] = lessons;
+                }
+            }
+        }
+
+        // Загрузка тестовых данных
+        function loadFallbackData() {
+            const testData = `=== ПОНЕДЕЛЬНИК ===
 Группа: 409
 --------------------------------------------------
-09:00 - 10:30 | Математика | 1.4 | Белицкая А.П.
-10:45 - 12:15 | Физическая культура | Спортзал | Иванов С.В.
+08:00 - 09:30 | Математика | 1.4 | Белицкая А.П.
+09:45 - 11:15 | Физика | Лаб. 1 | Петров В.И.
+11:30 - 13:00 | Информатика | Комп. класс 1 | Сидоров О.Н.
 
 Группа: 408
 --------------------------------------------------
-09:00 - 10:30 | Русский язык | 2.1 | Петрова Е.И.
-10:45 - 12:15 | История | 3.2 | Сидоров О.Н.
+08:00 - 09:30 | Русский язык | 2.1 | Иванова Е.В.
+09:45 - 11:15 | Литература | 2.1 | Николаева Л.М.
 
 === ВТОРНИК ===
-
 Группа: 409
 --------------------------------------------------
-09:00 - 10:30 | Физика | Лаб. 1 | Кузнецов В.М.
-10:45 - 12:15 | Химия | Лаб. 2 | Васильева Т.С.
-
-Группа: 408
---------------------------------------------------
-09:00 - 10:30 | Литература | 2.3 | Николаева Л.М.
-10:45 - 12:15 | Биология | Лаб. 3 | Федорова Г.А.
+08:00 - 09:30 | Физическая культура | Спортзал | Смирнов Д.В.
+09:45 - 11:15 | Химия | Лаб. 2 | Васильева Т.С.
 
 === СУББОТА ===
-
 Группа: 409
 --------------------------------------------------
-09:00 - 10:30 | Информатика | Комп. класс 1 | Смирнов Д.В.
-10:45 - 12:15 | Иностранный язык | 1.5 | Ковалева М.И.`;
-                
-                parseSchedule(testData);
-                updateGroupSelector();
-                
-                // Показываем расписание для первой группы
-                if (groups.size > 0) {
-                    const firstGroup = Array.from(groups)[0];
-                    document.getElementById('group').value = firstGroup;
-                    displayScheduleForGroup(firstGroup);
-                }
-            }
+09:00 - 10:30 | История | 3.2 | Кузнецова Л.М.`;
+
+            parseSchedule(testData);
+            updateGroupSelector();
+            displaySchedule();
         }
 
-        // Функция парсинга расписания из текста
-        function parseSchedule(text) {
-            const days = text.split('===').filter(day => day.trim());
-            
-            days.forEach(dayBlock => {
-                const dayParts = dayBlock.split('\n').filter(line => line.trim());
-                const dayName = dayParts[0].trim();
-                
-                if (!dayName) return;
-                
-                let currentGroup = '';
-                
-                for (let i = 1; i < dayParts.length; i++) {
-                    const line = dayParts[i].trim();
-                    
-                    if (line.startsWith('Группа:')) {
-                        currentGroup = line.split(':')[1].trim();
-                        groups.add(currentGroup);
-                        
-                        if (!scheduleData[currentGroup]) {
-                            scheduleData[currentGroup] = {};
-                        }
-                        
-                        if (!scheduleData[currentGroup][dayName]) {
-                            scheduleData[currentGroup][dayName] = [];
-                        }
-                    } else if (line.includes('|') && currentGroup) {
-                        const parts = line.split('|').map(part => part.trim());
-                        if (parts.length >= 4) {
-                            const lesson = {
-                                time: parts[0],
-                                subject: parts[1],
-                                room: parts[2],
-                                teacher: parts[3]
-                            };
-                            scheduleData[currentGroup][dayName].push(lesson);
-                            allTimeSlots.add(parts[0]);
-                        }
-                    }
-                }
-            });
-        }
-
-        // Обновление селектора групп
+        // Обновление списка групп
         function updateGroupSelector() {
-            const groupSelect = document.getElementById('group');
+            const select = document.getElementById('group');
+            select.innerHTML = '<option value="">Выберите группу</option>';
             
-            // Очищаем существующие опции, кроме первой
-            while (groupSelect.options.length > 1) {
-                groupSelect.remove(1);
-            }
-            
-            // Добавляем группы из расписания
-            Array.from(groups).sort().forEach(group => {
+            Array.from(scheduleData.groups).sort().forEach(group => {
                 const option = document.createElement('option');
                 option.value = group;
                 option.textContent = group;
-                groupSelect.appendChild(option);
+                select.appendChild(option);
             });
         }
 
-        // Отображение расписания для выбранной группы
-        function displayScheduleForGroup(group) {
-            const scheduleDays = document.querySelector('.schedule-days');
+        // Отображение расписания
+        function displaySchedule() {
+            const group = document.getElementById('group').value;
+            const tbody = document.getElementById('schedule-body');
+            tbody.innerHTML = '';
             
-            // Очищаем существующее расписание, кроме заголовков
-            while (scheduleDays.children.length > 7) { // 7 заголовков (время + 6 дней)
-                scheduleDays.removeChild(scheduleDays.lastChild);
-            }
-            
-            if (!group || !scheduleData[group]) {
-                // Если группа не выбрана или нет данных, показываем пустую таблицу
-                const sortedTimeSlots = Array.from(allTimeSlots).sort((a, b) => {
-                    const timeA = new Date(`1970-01-01 ${a.split(' - ')[0]}`);
-                    const timeB = new Date(`1970-01-01 ${b.split(' - ')[0]}`);
-                    return timeA - timeB;
-                });
-                
-                sortedTimeSlots.forEach(timeSlot => {
-                    const timeCell = document.createElement('div');
-                    timeCell.className = 'schedule-time';
-                    timeCell.textContent = timeSlot;
-                    scheduleDays.appendChild(timeCell);
-                    
-                    // Заполняем ячейки для каждого дня недели
-                    const days = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота'];
-                    
-                    days.forEach(day => {
-                        const cell = document.createElement('div');
-                        cell.className = 'schedule-cell empty-cell';
-                        cell.textContent = '—';
-                        scheduleDays.appendChild(cell);
-                    });
-                });
+            if (!group || !scheduleData.lessons[group]) {
+                createEmptySchedule();
                 return;
             }
             
-            // Сортируем временные слоты
-            const sortedTimeSlots = Array.from(allTimeSlots).sort((a, b) => {
-                const timeA = new Date(`1970-01-01 ${a.split(' - ')[0]}`);
-                const timeB = new Date(`1970-01-01 ${b.split(' - ')[0]}`);
-                return timeA - timeB;
-            });
+            const sortedTimeSlots = Array.from(scheduleData.timeSlots).sort();
+            const today = new Date().getDay() - 1; // 0-5 (Пн-Сб)
             
-            // Создаем строки для каждого временного слота
             sortedTimeSlots.forEach(timeSlot => {
-                const timeCell = document.createElement('div');
+                const row = document.createElement('tr');
+                
+                // Ячейка времени
+                const timeCell = document.createElement('td');
                 timeCell.className = 'schedule-time';
                 timeCell.textContent = timeSlot;
-                scheduleDays.appendChild(timeCell);
+                row.appendChild(timeCell);
                 
-                // Заполняем ячейки для каждого дня недели
-                const days = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота'];
-                
-                days.forEach(day => {
-                    const cell = document.createElement('div');
-                    cell.className = 'schedule-cell';
+                // Ячейки для каждого дня
+                scheduleData.days.forEach((day, dayIndex) => {
+                    const cell = document.createElement('td');
+                    if (dayIndex === today) cell.classList.add('current-day');
                     
-                    // Находим урок для этого времени и дня
-                    const lessons = scheduleData[group][day]?.filter(lesson => lesson.time === timeSlot) || [];
+                    const lessons = scheduleData.lessons[group][day]?.filter(
+                        lesson => lesson.time === timeSlot
+                    ) || [];
                     
                     if (lessons.length > 0) {
-                        const lesson = lessons[0]; // Берем первый урок (может быть несколько)
-                        
-                        const lessonDiv = document.createElement('div');
-                        lessonDiv.className = 'lesson';
-                        
-                        const nameDiv = document.createElement('div');
-                        nameDiv.className = 'lesson-name';
-                        nameDiv.textContent = lesson.subject;
-                        
-                        const teacherDiv = document.createElement('div');
-                        teacherDiv.className = 'lesson-teacher';
-                        teacherDiv.textContent = lesson.teacher;
-                        
-                        const roomDiv = document.createElement('div');
-                        roomDiv.className = 'lesson-room';
-                        roomDiv.textContent = lesson.room.startsWith('Лаб.') || lesson.room.startsWith('Спортзал') || 
-                                             lesson.room.startsWith('Комп. класс') ? 
-                                             lesson.room : `Ауд. ${lesson.room}`;
-                        
-                        lessonDiv.appendChild(nameDiv);
-                        lessonDiv.appendChild(teacherDiv);
-                        lessonDiv.appendChild(roomDiv);
-                        
-                        cell.appendChild(lessonDiv);
+                        const lesson = lessons[0];
+                        cell.innerHTML = `
+                            <div class="lesson">
+                                <div class="lesson-name">${lesson.subject}</div>
+                                <div class="lesson-teacher">${lesson.teacher}</div>
+                                <div class="lesson-room">${formatRoom(lesson.room)}</div>
+                            </div>
+                        `;
                     } else {
-                        cell.className = 'schedule-cell empty-cell';
+                        cell.className = 'empty-cell';
                         cell.textContent = '—';
                     }
                     
-                    scheduleDays.appendChild(cell);
+                    row.appendChild(cell);
                 });
-            });
-            
-            // Подсвечиваем текущий день
-            highlightCurrentDay();
-        }
-
-        // Подсветка текущего дня
-        function highlightCurrentDay() {
-            const days = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота', 'Воскресенье'];
-            const today = new Date().getDay() - 1; // 0-6, где 0 - понедельник
-            
-            if (today >= 0 && today < 6) { // Только рабочие дни + суббота
-                const dayName = days[today];
-                const dayIndex = days.indexOf(dayName);
                 
-                if (dayIndex >= 0) {
-                    // Находим все ячейки для этого дня (каждая строка начинается с времени)
-                    const allCells = document.querySelectorAll('.schedule-days > div');
-                    let columnIndex = dayIndex + 1; // +1 потому что первый столбец - время
-                    
-                    for (let i = 7; i < allCells.length; i += 7) { // 7 столбцов (время + 6 дней)
-                        const cell = allCells[i + columnIndex];
-                        if (cell) {
-                            cell.classList.add('current-day');
-                        }
-                    }
-                }
-            }
+                tbody.appendChild(row);
+            });
         }
 
-        // Инициализация при загрузке страницы
+        // Форматирование номера аудитории
+        function formatRoom(room) {
+            if (/^(лаборатория|лабораторная|лаб\.?|компьютерный класс|комп\.? класс|спортзал)/i.test(room)) {
+                return room;
+            }
+            return `Ауд. ${room}`;
+        }
+
+        // Создание пустого расписания
+        function createEmptySchedule() {
+            const tbody = document.getElementById('schedule-body');
+            const defaultTimes = [
+                '08:00 - 09:30', 
+                '09:45 - 11:15', 
+                '11:30 - 13:00', 
+                '13:30 - 15:00', 
+                '15:15 - 16:45'
+            ];
+            
+            defaultTimes.forEach(time => {
+                const row = document.createElement('tr');
+                const timeCell = document.createElement('td');
+                timeCell.className = 'schedule-time';
+                timeCell.textContent = time;
+                row.appendChild(timeCell);
+                
+                for (let i = 0; i < 6; i++) {
+                    const cell = document.createElement('td');
+                    cell.className = 'empty-cell';
+                    cell.textContent = '—';
+                    row.appendChild(cell);
+                }
+                
+                tbody.appendChild(row);
+            });
+        }
+
+        // Инициализация
         document.addEventListener('DOMContentLoaded', () => {
-            // Загружаем расписание
             loadSchedule();
             
-            // Обработчик изменения выбора группы
-            document.getElementById('group').addEventListener('change', function() {
-                displayScheduleForGroup(this.value);
-            });
+            document.getElementById('group').addEventListener('change', displaySchedule);
             
             // Фиксированный хедер при скролле
             let lastScroll = 0;
