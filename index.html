@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Расписание занятий | Брюховецкий техникум</title>
+    <meta name="description" content="Официальное расписание занятий Брюховецкого техникума">
+    <style>
+        :root {
+            --primary: #2c3e50;
+            --secondary: #3498db;
+            --accent: #e74c3c;
+            --light: #ecf0f1;
+            --dark: #1a1a2e;
+            --card-bg: rgba(255, 255, 255, 0.95);
+            --border-radius: 12px;
+            --box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+            --transition: all 0.3s ease;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Roboto', 'Segoe UI', sans-serif;
+            line-height: 1.6;
+            color: var(--dark);
+            background-color: #f5f7fa;
+            background-image: linear-gradient(135deg, #f5f7fa 0%, #e4e8eb 100%);
+            min-height: 100vh;
+            padding-top: 80px; /* Для фиксированного хедера */
+        }
+
+        a {
+            text-decoration: none;
+            color: var(--secondary);
+            transition: var(--transition);
+        }
+
+        a:hover {
+            color: var(--accent);
+        }
+
+        .container {
+            width: 100%;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 15px;
+        }
+
+        /* Header */
+        header {
+            background-color: white;
+            box-shadow: var(--box-shadow);
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+            transition: transform 0.3s ease;
+        }
+
+        .header-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 0;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .logo img {
+            height: 50px;
+            width: auto;
+        }
+
+        .logo-text h1 {
+            font-size: 1.5rem;
+            color: var(--primary);
+            font-weight: 700;
+        }
+
+        .logo-text p {
+            font-size: 0.9rem;
+            color: #7f8c8d;
+        }
+
+        .nav-toggle {
+            display: none;
+            background: none;
+            border: none;
+            color: var(--primary);
+            font-size: 1.5rem;
+            cursor: pointer;
+        }
+
+        nav ul {
+            display: flex;
+            list-style: none;
+            gap: 2rem;
+        }
+
+        nav ul li a {
+            color: var(--primary);
+            font-weight: 500;
+            padding: 0.5rem 0;
+            position: relative;
+        }
+
+        nav ul li a.active {
+            color: var(--accent);
+        }
+
+        nav ul li a::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 0;
+            height: 2px;
+            background-color: var(--accent);
+            transition: var(--transition);
+        }
+
+        nav ul li a:hover::after,
+        nav ul li a.active::after {
+            width: 100%;
+        }
+
+        /* Main content */
+        main {
+            padding: 2rem 0;
+        }
+
+        .page-header {
+            margin-bottom: 2rem;
+            text-align: center;
+        }
+
+        .page-header h2 {
+            font-size: 2.2rem;
+            color: var(--primary);
+            margin-bottom: 0.5rem;
+        }
+
+        /* Schedule controls */
+        .schedule-controls {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 2rem;
+        }
+
+        .group-selector {
+            position: relative;
+        }
+
+        select {
+            padding: 0.8rem 2rem 0.8rem 1rem;
+            border: 2px solid #ddd;
+            border-radius: var(--border-radius);
+            background-color: white;
+            color: var(--primary);
+            font-size: 1rem;
+            font-weight: 500;
+            transition: var(--transition);
+            cursor: pointer;
+            appearance: none;
+            min-width: 300px;
+            background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%232c3e50'%3e%3cpath d='M7 10l5 5 5-5z'/%3e%3c/svg%3e");
+            background-repeat: no-repeat;
+            background-position: right 0.7rem center;
+            background-size: 1em;
+        }
+
+        select:focus {
+            outline: none;
+            border-color: var(--secondary);
+            box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.2);
+        }
+
+        /* New Schedule Table */
+        .schedule-container {
+            background-color: var(--card-bg);
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
+            overflow: hidden;
+            margin-bottom: 2rem;
+        }
+
+        .schedule-days {
+            display: grid;
+            grid-template-columns: 120px repeat(5, 1fr);
+            gap: 1px;
+            background-color: #ddd;
+        }
+
+        .schedule-header {
+            background-color: var(--primary);
+            color: white;
+            padding: 1rem;
+            text-align: center;
+            font-weight: 500;
+        }
+
+        .schedule-time {
+            background-color: white;
+            padding: 1rem;
+            text-align: center;
+            font-weight: 500;
+            color: var(--primary);
+            border-right: 1px solid #eee;
+        }
+
+        .schedule-cell {
+            background-color: white;
+            padding: 1rem;
+            min-height: 80px;
+            border-right: 1px solid #eee;
+            border-bottom: 1px solid #eee;
+        }
+
+        .current-day {
+            background-color: rgba(52, 152, 219, 0.1);
+            position: relative;
+        }
+
+        .current-day::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            height: 100%;
+            width: 4px;
+            background-color: var(--secondary);
+        }
+
+        .lesson {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+
+        .lesson-name {
+            font-weight: 600;
+            margin-bottom: 0.3rem;
+            color: var(--primary);
+        }
+
+        .lesson-teacher {
+            font-size: 0.9rem;
+            color: #7f8c8d;
+            margin-bottom: 0.2rem;
+        }
+
+        .lesson-room {
+            font-size: 0.9rem;
+            color: var(--secondary);
+            font-weight: 500;
+        }
+
+        .empty-cell {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #bdc3c7;
+            font-size: 0.9rem;
+        }
+
+        /* Footer */
+        footer {
+            background-color: var(--primary);
+            color: white;
+            padding: 2rem 0;
+        }
+
+        .footer-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1.5rem;
+        }
+
+        .social-links {
+            display: flex;
+            gap: 1.5rem;
+        }
+
+        .social-links a {
+            color: white;
+            font-size: 1.5rem;
+            transition: var(--transition);
+        }
+
+        .social-links a:hover {
+            color: var(--secondary);
+            transform: translateY(-3px);
+        }
+
+        .copyright {
+            text-align: center;
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 0.9rem;
+        }
+
+        .creator-signature {
+            font-size: 0.7rem;
+            color: rgba(255, 255, 255, 0.5);
+            transition: all 0.6s ease;
+            cursor: pointer;
+            display: inline-block;
+            margin-top: 0.8rem;
+            text-decoration: underline;
+            text-underline-offset: 2px;
+        }
+
+        .creator-signature:hover, .creator-signature:focus {
+            animation: colorPulse 3s infinite alternate;
+            text-shadow: 0 0 8px rgba(138, 43, 226, 0.4);
+        }
+
+        @keyframes colorPulse {
+            0% {
+                color: #8A2BE2;
+            }
+            50% {
+                color: var(--secondary);
+            }
+            100% {
+                color: #4B0082;
+            }
+        }
+
+        /* Responsive */
+        @media (max-width: 992px) {
+            .schedule-days {
+                grid-template-columns: 100px repeat(5, 1fr);
+            }
+        }
+
+        @media (max-width: 768px) {
+            .nav-toggle {
+                display: block;
+            }
+
+            nav {
+                position: absolute;
+                top: 100%;
+                left: 0;
+                width: 100%;
+                background-color: white;
+                box-shadow: 0 5px 10px rgba(0, 0, 0, 0.1);
+                max-height: 0;
+                overflow: hidden;
+                transition: max-height 0.3s ease;
+            }
+
+            nav.active {
+                max-height: 300px;
+                padding: 1rem 0;
+            }
+
+            nav ul {
+                flex-direction: column;
+                gap: 0;
+            }
+
+            nav ul li a {
+                display: block;
+                padding: 0.8rem 1.5rem;
+            }
+
+            nav ul li a::after {
+                display: none;
+            }
+
+            .schedule-days {
+                display: block;
+                overflow-x: auto;
+                white-space: nowrap;
+            }
+
+            .schedule-header, .schedule-time, .schedule-cell {
+                display: inline-block;
+                vertical-align: top;
+                min-width: 200px;
+                white-space: normal;
+            }
+
+            .schedule-time {
+                width: 100px;
+            }
+        }
+
+        @media (max-width: 576px) {
+            .logo-text h1 {
+                font-size: 1.3rem;
+            }
+
+            .page-header h2 {
+                font-size: 1.8rem;
+            }
+
+            select {
+                min-width: 100%;
+            }
+        }
+    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+</head>
+<body>
+    <header>
+        <div class="container header-container">
+            <div class="logo">
+                <img src="https://23gapoukkbmt.ru/wp-content/uploads/2023/02/c24a5f62-888c-4218-a95b-d79e2bfa695a455555555.png" alt="Логотип БМТ">
+                <div class="logo-text">
+                    <h1>Брюховецкий Многопрофильный техникум</h1>
+                    <p>Расписание занятий</p>
+                </div>
+            </div>
+            <button class="nav-toggle" aria-label="Меню">☰</button>
+            <nav>
+                <ul>
+                    <li><a href="https://23gapoukkbmt.ru/">На главную</a></li>
+                    <li><a href="#" class="active">Расписание</a></li>
+                </ul>
+            </nav>
+        </div>
+    </header>
+
+    <main>
+        <div class="container">
+            <div class="page-header">
+                <h2>Расписание занятий</h2>
+                <p>Актуальное расписание для всех групп техникума</p>
+            </div>
+
+            <div class="schedule-controls">
+                <div class="group-selector">
+                    <select id="group">
+                        <option value="">Выберите группу</option>
+                        <!-- Группы будут заполнены из файла raspisanie.txt -->
+                    </select>
+                </div>
+            </div>
+
+            <div class="schedule-container">
+                <div class="schedule-days">
+                    <!-- Time column -->
+                    <div class="schedule-header">Время</div>
+                    <div class="schedule-header">Понедельник</div>
+                    <div class="schedule-header">Вторник</div>
+                    <div class="schedule-header">Среда</div>
+                    <div class="schedule-header">Четверг</div>
+                    <div class="schedule-header">Пятница</div>
+
+                    <!-- Расписание будет заполнено динамически -->
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <div class="container">
+            <div class="footer-container">
+                <div class="social-links">
+                    <a href="https://vk.com/gapoukkbmt" aria-label="ВКонтакте"><i class="fab fa-vk"></i></a>
+                </div>
+                <div class="copyright">
+                    <p>© БМТ</p>
+                    <a href="https://allgameg87.github.io/Wiki_Elizar/" class="creator-signature">Сделал сайт Чиркин Е. А.</a>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Мобильное меню
+        const navToggle = document.querySelector('.nav-toggle');
+        const nav = document.querySelector('nav');
+
+        navToggle.addEventListener('click', () => {
+            nav.classList.toggle('active');
+        });
+
+        // Парсинг файла с расписанием
+        let scheduleData = {};
+        let groups = new Set();
+
+        // Функция для загрузки и парсинга файла с расписанием
+        async function loadSchedule() {
+            try {
+                const response = await fetch('raspisanie.txt');
+                const text = await response.text();
+                parseSchedule(text);
+                updateGroupSelector();
+            } catch (error) {
+                console.error('Ошибка загрузки расписания:', error);
+                // Если файл не загружается, используем тестовые данные
+                const testData = `=== ПОНЕДЕЛЬНИК ===
+
+Группа: 409
+--------------------------------------------------
+09:00 - 10:30 | Матем | 1.4 | Белицкая
+10:45 - 12:15 | Физра | Спортзал | Иванов
+
+Группа: 408
+--------------------------------------------------
+09:00 - 10:30 | Русский | 2.1 | Петрова
+10:45 - 12:15 | История | 3.2 | Сидоров
+
+=== ВТОРНИК ===
+
+Группа: 409
+--------------------------------------------------
+09:00 - 10:30 | Физика | Лаб. 1 | Кузнецов
+10:45 - 12:15 | Химия | Лаб. 2 | Васильева
+
+Группа: 408
+--------------------------------------------------
+09:00 - 10:30 | Литера | 2.3 | Николаева
+10:45 - 12:15 | Биология | Лаб. 3 | Федорова`;
+                
+                parseSchedule(testData);
+                updateGroupSelector();
+            }
+        }
+
+        // Функция парсинга расписания из текста
+        function parseSchedule(text) {
+            const days = text.split('===').filter(day => day.trim());
+            
+            days.forEach(dayBlock => {
+                const dayParts = dayBlock.split('\n').filter(line => line.trim());
+                const dayName = dayParts[0].trim();
+                
+                if (!dayName) return;
+                
+                let currentGroup = '';
+                
+                for (let i = 1; i < dayParts.length; i++) {
+                    const line = dayParts[i].trim();
+                    
+                    if (line.startsWith('Группа:')) {
+                        currentGroup = line.split(':')[1].trim();
+                        groups.add(currentGroup);
+                        
+                        if (!scheduleData[currentGroup]) {
+                            scheduleData[currentGroup] = {};
+                        }
+                        
+                        if (!scheduleData[currentGroup][dayName]) {
+                            scheduleData[currentGroup][dayName] = [];
+                        }
+                    } else if (line.includes('|') && currentGroup) {
+                        const parts = line.split('|').map(part => part.trim());
+                        if (parts.length >= 4) {
+                            scheduleData[currentGroup][dayName].push({
+                                time: parts[0],
+                                subject: parts[1],
+                                room: parts[2],
+                                teacher: parts[3]
+                            });
+                        }
+                    }
+                }
+            });
+        }
+
+        // Обновление селектора групп
+        function updateGroupSelector() {
+            const groupSelect = document.getElementById('group');
+            
+            // Очищаем существующие опции, кроме первой
+            while (groupSelect.options.length > 1) {
+                groupSelect.remove(1);
+            }
+            
+            // Добавляем группы из расписания
+            Array.from(groups).sort().forEach(group => {
+                const option = document.createElement('option');
+                option.value = group;
+                option.textContent = group;
+                groupSelect.appendChild(option);
+            });
+        }
+
+        // Отображение расписания для выбранной группы
+        function displayScheduleForGroup(group) {
+            const scheduleDays = document.querySelector('.schedule-days');
+            
+            // Очищаем существующее расписание, кроме заголовков
+            while (scheduleDays.children.length > 6) {
+                scheduleDays.removeChild(scheduleDays.lastChild);
+            }
+            
+            if (!group || !scheduleData[group]) {
+                // Если группа не выбрана или нет данных, показываем пустую таблицу
+                for (let i = 0; i < 5; i++) { // 5 временных слотов
+                    const timeCell = document.createElement('div');
+                    timeCell.className = 'schedule-time';
+                    timeCell.textContent = `${8 + i}:00 - ${9 + i}:30`;
+                    scheduleDays.appendChild(timeCell);
+                    
+                    for (let j = 0; j < 5; j++) { // 5 дней недели
+                        const cell = document.createElement('div');
+                        cell.className = 'schedule-cell empty-cell';
+                        cell.textContent = '—';
+                        scheduleDays.appendChild(cell);
+                    }
+                }
+                return;
+            }
+            
+            // Определяем временные слоты
+            const timeSlots = new Set();
+            Object.values(scheduleData[group]).forEach(lessons => {
+                lessons.forEach(lesson => {
+                    timeSlots.add(lesson.time);
+                });
+            });
+            
+            // Сортируем временные слоты
+            const sortedTimeSlots = Array.from(timeSlots).sort((a, b) => {
+                const timeA = new Date(`1970-01-01 ${a.split(' - ')[0]}`);
+                const timeB = new Date(`1970-01-01 ${b.split(' - ')[0]}`);
+                return timeA - timeB;
+            });
+            
+            // Создаем строки для каждого временного слота
+            sortedTimeSlots.forEach(timeSlot => {
+                const timeCell = document.createElement('div');
+                timeCell.className = 'schedule-time';
+                timeCell.textContent = timeSlot;
+                scheduleDays.appendChild(timeCell);
+                
+                // Заполняем ячейки для каждого дня недели
+                const days = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница'];
+                
+                days.forEach(day => {
+                    const cell = document.createElement('div');
+                    cell.className = 'schedule-cell';
+                    
+                    // Находим урок для этого времени и дня
+                    const lessons = scheduleData[group][day]?.filter(lesson => lesson.time === timeSlot) || [];
+                    
+                    if (lessons.length > 0) {
+                        const lesson = lessons[0]; // Берем первый урок (может быть несколько)
+                        
+                        const lessonDiv = document.createElement('div');
+                        lessonDiv.className = 'lesson';
+                        
+                        const nameDiv = document.createElement('div');
+                        nameDiv.className = 'lesson-name';
+                        nameDiv.textContent = lesson.subject;
+                        
+                        const teacherDiv = document.createElement('div');
+                        teacherDiv.className = 'lesson-teacher';
+                        teacherDiv.textContent = lesson.teacher;
+                        
+                        const roomDiv = document.createElement('div');
+                        roomDiv.className = 'lesson-room';
+                        roomDiv.textContent = `Ауд. ${lesson.room}`;
+                        
+                        lessonDiv.appendChild(nameDiv);
+                        lessonDiv.appendChild(teacherDiv);
+                        lessonDiv.appendChild(roomDiv);
+                        
+                        cell.appendChild(lessonDiv);
+                    } else {
+                        cell.className = 'schedule-cell empty-cell';
+                        cell.textContent = '—';
+                    }
+                    
+                    scheduleDays.appendChild(cell);
+                });
+            });
+            
+            // Подсвечиваем текущий день
+            highlightCurrentDay();
+        }
+
+        // Подсветка текущего дня
+        function highlightCurrentDay() {
+            const days = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота', 'Воскресенье'];
+            const today = new Date().getDay() - 1; // 0-6, где 0 - понедельник
+            
+            if (today >= 0 && today < 5) { // Только рабочие дни
+                const dayName = days[today];
+                const dayIndex = days.indexOf(dayName);
+                
+                if (dayIndex >= 0) {
+                    // Находим все ячейки для этого дня (каждая строка начинается с времени)
+                    const allCells = document.querySelectorAll('.schedule-days > div');
+                    let columnIndex = dayIndex + 1; // +1 потому что первый столбец - время
+                    
+                    for (let i = 6; i < allCells.length; i += 6) { // 6 столбцов (время + 5 дней)
+                        const cell = allCells[i + columnIndex];
+                        if (cell) {
+                            cell.classList.add('current-day');
+                        }
+                    }
+                }
+            }
+        }
+
+        // Выбор группы
+        const groupSelect = document.getElementById('group');
+        
+        groupSelect.addEventListener('change', () => {
+            const group = groupSelect.value;
+            displayScheduleForGroup(group);
+        });
+
+        // Инициализация при загрузке страницы
+        document.addEventListener('DOMContentLoaded', () => {
+            // Загружаем расписание
+            loadSchedule();
+            
+            // Показываем расписание для первой группы, если она есть
+            groupSelect.addEventListener('change', () => {
+                const group = groupSelect.value;
+                displayScheduleForGroup(group);
+            });
+            
+            // Показываем текущий день
+            highlightCurrentDay();
+            
+            // Фиксированный хедер при скролле
+            let lastScroll = 0;
+            const header = document.querySelector('header');
+            
+            window.addEventListener('scroll', () => {
+                const currentScroll = window.pageYOffset;
+                
+                if (currentScroll <= 0) {
+                    header.style.transform = 'translateY(0)';
+                } else if (currentScroll > lastScroll) {
+                    header.style.transform = 'translateY(-100%)';
+                } else {
+                    header.style.transform = 'translateY(0)';
+                }
+                
+                lastScroll = currentScroll;
+            });
+        });
+    </script>
+</body>
+</html>
