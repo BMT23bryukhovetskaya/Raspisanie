@@ -51,7 +51,6 @@
             padding: 0 15px;
         }
 
-        /* Header */
         header {
             background-color: white;
             box-shadow: var(--box-shadow);
@@ -134,7 +133,6 @@
             width: 100%;
         }
 
-        /* Main content */
         main {
             padding: 2rem 0;
         }
@@ -150,7 +148,6 @@
             margin-bottom: 0.5rem;
         }
 
-        /* Schedule controls */
         .schedule-controls {
             display: flex;
             justify-content: center;
@@ -185,7 +182,6 @@
             box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.2);
         }
 
-        /* Schedule Table */
         .schedule-container {
             background-color: var(--card-bg);
             border-radius: var(--border-radius);
@@ -212,6 +208,7 @@
             padding: 1rem;
             border: 1px solid #eee;
             vertical-align: top;
+            min-width: 150px;
         }
 
         .schedule-time {
@@ -265,7 +262,6 @@
             text-align: center;
         }
 
-        /* Footer */
         footer {
             background-color: var(--primary);
             color: white;
@@ -329,7 +325,6 @@
             }
         }
 
-        /* Responsive */
         @media (max-width: 768px) {
             .nav-toggle {
                 display: block;
@@ -471,7 +466,7 @@
             nav.classList.toggle('active');
         });
 
-        // Основной объект для хранения расписания
+        // Основной объект для хранения данных расписания
         const scheduleData = {
             groups: new Set(),
             days: ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота'],
@@ -479,7 +474,16 @@
             lessons: {}
         };
 
-        // Загрузка и парсинг расписания
+        // Стандартные временные слоты
+        const defaultTimeSlots = [
+            '08:00 - 09:30',
+            '09:45 - 11:15',
+            '11:30 - 13:00',
+            '13:30 - 15:00',
+            '15:15 - 16:45'
+        ];
+
+        // Загрузка расписания из файла
         async function loadSchedule() {
             try {
                 const response = await fetch('raspisanie.txt');
@@ -496,14 +500,21 @@
 
         // Парсинг текста расписания
         function parseSchedule(text) {
-            const dayBlocks = text.split(/=== ([^=]+) ===/).slice(1);
+            // Очищаем предыдущие данные
+            scheduleData.groups.clear();
+            scheduleData.timeSlots.clear();
+            scheduleData.lessons = {};
+
+            // Разбиваем на дни
+            const daySections = text.split(/=== ([^=]+) ===/).slice(1);
             
-            for (let i = 0; i < dayBlocks.length; i += 2) {
-                const dayName = dayBlocks[i].trim();
-                const content = dayBlocks[i+1];
+            for (let i = 0; i < daySections.length; i += 2) {
+                const dayName = daySections[i].trim();
+                const content = daySections[i+1];
                 
                 if (!scheduleData.days.includes(dayName)) continue;
                 
+                // Разбиваем на группы
                 const groupSections = content.split(/Группа:\s*(.+)/).slice(1);
                 
                 for (let j = 0; j < groupSections.length; j += 2) {
@@ -518,13 +529,23 @@
                         scheduleData.lessons[groupName] = {};
                     }
                     
+                    // Обрабатываем уроки
                     const lessons = lessonsText.trim().split('\n')
                         .filter(line => line.includes('|'))
                         .map(line => {
-                            const [time, subject, room, teacher] = line.split('|').map(s => s.trim());
+                            const parts = line.split('|').map(p => p.trim());
+                            if (parts.length < 4) return null;
+                            
+                            const time = parts[0];
+                            const subject = parts[1];
+                            const room = parts[2];
+                            const teacher = parts[3];
+                            
                             scheduleData.timeSlots.add(time);
+                            
                             return { time, subject, room, teacher };
-                        });
+                        })
+                        .filter(lesson => lesson !== null);
                     
                     scheduleData.lessons[groupName][dayName] = lessons;
                 }
@@ -585,10 +606,14 @@
                 return;
             }
             
-            const sortedTimeSlots = Array.from(scheduleData.timeSlots).sort();
+            // Используем стандартные временные слоты или найденные в файле
+            const timeSlotsToUse = scheduleData.timeSlots.size > 0 
+                ? Array.from(scheduleData.timeSlots).sort() 
+                : defaultTimeSlots;
+            
             const today = new Date().getDay() - 1; // 0-5 (Пн-Сб)
             
-            sortedTimeSlots.forEach(timeSlot => {
+            timeSlotsToUse.forEach(timeSlot => {
                 const row = document.createElement('tr');
                 
                 // Ячейка времени
@@ -627,30 +652,31 @@
             });
         }
 
-        // Форматирование номера аудитории
+        // Форматирование аудитории
         function formatRoom(room) {
-            if (/^(лаборатория|лабораторная|лаб\.?|компьютерный класс|комп\.? класс|спортзал)/i.test(room)) {
+            if (!room) return '';
+            
+            // Проверяем специальные типы аудиторий
+            const lowerRoom = room.toLowerCase();
+            if (lowerRoom.includes('лаб') || 
+                lowerRoom.includes('комп') || 
+                lowerRoom.includes('спортзал')) {
                 return room;
             }
+            
+            // Для обычных аудиторий добавляем "Ауд."
             return `Ауд. ${room}`;
         }
 
         // Создание пустого расписания
         function createEmptySchedule() {
             const tbody = document.getElementById('schedule-body');
-            const defaultTimes = [
-                '08:00 - 09:30', 
-                '09:45 - 11:15', 
-                '11:30 - 13:00', 
-                '13:30 - 15:00', 
-                '15:15 - 16:45'
-            ];
             
-            defaultTimes.forEach(time => {
+            defaultTimeSlots.forEach(timeSlot => {
                 const row = document.createElement('tr');
                 const timeCell = document.createElement('td');
                 timeCell.className = 'schedule-time';
-                timeCell.textContent = time;
+                timeCell.textContent = timeSlot;
                 row.appendChild(timeCell);
                 
                 for (let i = 0; i < 6; i++) {
