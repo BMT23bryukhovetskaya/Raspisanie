@@ -474,27 +474,18 @@
             lessons: {}
         };
 
-        // Стандартные временные слоты
-        const defaultTimeSlots = [
-            '08:00 - 09:30',
-            '09:45 - 11:15',
-            '11:30 - 13:00',
-            '13:30 - 15:00',
-            '15:15 - 16:45'
-        ];
-
         // Загрузка расписания из файла
         async function loadSchedule() {
             try {
                 const response = await fetch('raspisanie.txt');
-                if (!response.ok) throw new Error('Файл не найден');
+                if (!response.ok) throw new Error('Файл расписания не найден');
                 const text = await response.text();
                 parseSchedule(text);
                 updateGroupSelector();
                 displaySchedule();
             } catch (error) {
-                console.error('Ошибка загрузки:', error);
-                loadFallbackData();
+                console.error('Ошибка загрузки расписания:', error);
+                createEmptySchedule();
             }
         }
 
@@ -506,7 +497,7 @@
             scheduleData.lessons = {};
 
             // Разбиваем текст по дням недели
-            const dayRegex = /=== (Понедельник|Вторник|Среда|Четверг|Пятница|Суббота) ===/g;
+            const dayRegex = /=== (Понедельник|Вторник|Среда|Четверг|Пятница|Суббота) ===/gi;
             const daySections = text.split(dayRegex).slice(1);
             
             // Обрабатываем каждый день
@@ -517,7 +508,7 @@
                 if (!scheduleData.days.includes(dayName)) continue;
                 
                 // Разбиваем на группы
-                const groupRegex = /Группа:\s*([^\n]+)/g;
+                const groupRegex = /Группа:\s*([^\n]+)/gi;
                 let groupMatch;
                 let lastIndex = 0;
                 
@@ -558,36 +549,6 @@
             }
         }
 
-        // Загрузка тестовых данных
-        function loadFallbackData() {
-            const testData = `=== ПОНЕДЕЛЬНИК ===
-Группа: 409
---------------------------------------------------
-08:00 - 09:30 | Математика | 1.4 | Белицкая А.П.
-09:45 - 11:15 | Физика | Лаб. 1 | Петров В.И.
-11:30 - 13:00 | Информатика | Комп. класс 1 | Сидоров О.Н.
-
-Группа: 408
---------------------------------------------------
-08:00 - 09:30 | Русский язык | 2.1 | Иванова Е.В.
-09:45 - 11:15 | Литература | 2.1 | Николаева Л.М.
-
-=== ВТОРНИК ===
-Группа: 409
---------------------------------------------------
-08:00 - 09:30 | Физическая культура | Спортзал | Смирнов Д.В.
-09:45 - 11:15 | Химия | Лаб. 2 | Васильева Т.С.
-
-=== СУББОТА ===
-Группа: 409
---------------------------------------------------
-09:00 - 10:30 | История | 3.2 | Кузнецова Л.М.`;
-
-            parseSchedule(testData);
-            updateGroupSelector();
-            displaySchedule();
-        }
-
         // Обновление списка групп
         function updateGroupSelector() {
             const select = document.getElementById('group');
@@ -612,14 +573,12 @@
                 return;
             }
             
-            // Используем временные слоты из данных или стандартные
-            const timeSlotsToUse = scheduleData.timeSlots.size > 0 
-                ? Array.from(scheduleData.timeSlots).sort() 
-                : defaultTimeSlots;
+            // Используем временные слоты из данных
+            const timeSlots = Array.from(scheduleData.timeSlots).sort();
             
             const today = new Date().getDay() - 1; // 0-5 (Пн-Сб)
             
-            timeSlotsToUse.forEach(timeSlot => {
+            timeSlots.forEach(timeSlot => {
                 const row = document.createElement('tr');
                 
                 // Ячейка времени
@@ -677,8 +636,14 @@
         // Создание пустого расписания
         function createEmptySchedule() {
             const tbody = document.getElementById('schedule-body');
+            tbody.innerHTML = '';
             
-            defaultTimeSlots.forEach(timeSlot => {
+            // Если нет временных слотов, используем стандартные
+            const timeSlots = scheduleData.timeSlots.size > 0 
+                ? Array.from(scheduleData.timeSlots).sort() 
+                : ['08:00 - 09:30', '09:45 - 11:15', '11:30 - 13:00', '13:30 - 15:00', '15:15 - 16:45'];
+            
+            timeSlots.forEach(timeSlot => {
                 const row = document.createElement('tr');
                 const timeCell = document.createElement('td');
                 timeCell.className = 'schedule-time';
