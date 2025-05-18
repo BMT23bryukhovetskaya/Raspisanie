@@ -474,10 +474,11 @@
             lessons: {}
         };
 
-        // Загрузка расписания из файла
+        // Загрузка расписания из файла с кэшированием
         async function loadSchedule() {
             try {
-                const response = await fetch('raspisanie.txt');
+                // Добавляем параметр запроса для избежания кэширования
+                const response = await fetch('raspisanie.txt?t=' + new Date().getTime());
                 if (!response.ok) throw new Error('Файл расписания не найден');
                 const text = await response.text();
                 parseSchedule(text);
@@ -489,31 +490,38 @@
             }
         }
 
-        // Парсинг текста расписания
+        // Улучшенный парсинг текста расписания
         function parseSchedule(text) {
-            // Очищаем предыдущие данные
             scheduleData.groups.clear();
             scheduleData.timeSlots.clear();
             scheduleData.lessons = {};
 
-            // Разбиваем текст по дням недели
-            const dayRegex = /=== (Понедельник|Вторник|Среда|Четверг|Пятница|Суббота) ===/gi;
-            const daySections = text.split(dayRegex).slice(1);
+            // Нормализуем текст - заменяем разные варианты разделителей
+            const normalizedText = text
+                .replace(/===/g, '===')
+                .replace(/---/g, '---')
+                .replace(/\r\n/g, '\n');
+
+            // Разбиваем текст по дням недели (регистронезависимо)
+            const daySections = normalizedText.split(/=== (понедельник|вторник|среда|четверг|пятница|суббота) ===/i);
             
             // Обрабатываем каждый день
-            for (let i = 0; i < daySections.length; i += 2) {
-                const dayName = daySections[i].trim();
+            for (let i = 1; i < daySections.length; i += 2) {
+                const dayName = capitalizeFirstLetter(daySections[i].trim());
                 const content = daySections[i+1];
                 
                 if (!scheduleData.days.includes(dayName)) continue;
                 
-                // Разбиваем на группы
-                const groupRegex = /Группа:\s*([^\n]+)/gi;
-                let groupMatch;
-                let lastIndex = 0;
+                // Разбиваем на группы (регистронезависимо)
+                const groupSections = content.split(/группа:\s*/gi);
                 
-                while ((groupMatch = groupRegex.exec(content)) !== null) {
-                    const groupName = groupMatch[1].trim();
+                for (let j = 1; j < groupSections.length; j++) {
+                    const groupContent = groupSections[j];
+                    const groupNameEnd = groupContent.indexOf('\n');
+                    const groupName = groupContent.substring(0, groupNameEnd).trim();
+                    
+                    if (!groupName) continue;
+                    
                     scheduleData.groups.add(groupName);
                     
                     if (!scheduleData.lessons[groupName]) {
@@ -521,13 +529,7 @@
                     }
                     
                     // Получаем текст с уроками для этой группы
-                    const lessonsStart = groupMatch.index + groupMatch[0].length;
-                    let lessonsEnd = content.indexOf('Группа:', lessonsStart);
-                    if (lessonsEnd === -1) lessonsEnd = content.length;
-                    
-                    const lessonsText = content.slice(lessonsStart, lessonsEnd);
-                    
-                    // Обрабатываем уроки
+                    const lessonsText = groupContent.substring(groupNameEnd);
                     const lessonLines = lessonsText.split('\n')
                         .map(line => line.trim())
                         .filter(line => line && line.includes('|') && !line.startsWith('---'));
@@ -543,7 +545,12 @@
                         
                         scheduleData.timeSlots.add(time);
                         
-                        return { time, subject, room, teacher };
+                        return { 
+                            time, 
+                            subject: capitalizeFirstLetter(subject),
+                            room: room,
+                            teacher: capitalizeFirstLetter(teacher)
+                        };
                     }).filter(lesson => lesson !== null);
                 }
             }
@@ -554,7 +561,15 @@
             const select = document.getElementById('group');
             select.innerHTML = '<option value="">Выберите группу</option>';
             
-            Array.from(scheduleData.groups).sort().forEach(group => {
+            Array.from(scheduleData.groups).sort((a, b) => {
+                // Сортируем группы: сначала числовые, затем буквенные
+                const numA = parseInt(a);
+                const numB = parseInt(b);
+                if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+                if (!isNaN(numA)) return -1;
+                if (!isNaN(numB)) return 1;
+                return a.localeCompare(b);
+            }).forEach(group => {
                 const option = document.createElement('option');
                 option.value = group;
                 option.textContent = group;
@@ -562,7 +577,7 @@
             });
         }
 
-        // Отображение расписания
+        // Отображение расписания с улучшенной обработкой данных
         function displaySchedule() {
             const group = document.getElementById('group').value;
             const tbody = document.getElementById('schedule-body');
@@ -573,8 +588,15 @@
                 return;
             }
             
-            // Используем временные слоты из данных
-            const timeSlots = Array.from(scheduleData.timeSlots).sort();
+            // Сортируем временные слоты
+            const timeSlots = Array.from(scheduleData.timeSlots).sort((a, b) => {
+                const timeToMinutes = time => {
+                    const [start] = time.split('-').map(s => s.trim());
+                    const [hours, minutes] = start.split(':').map(Number);
+                    return hours * 60 + minutes;
+                };
+                return timeToMinutes(a) - timeToMinutes(b);
+            });
             
             const today = new Date().getDay() - 1; // 0-5 (Пн-Сб)
             
@@ -621,7 +643,6 @@
         function formatRoom(room) {
             if (!room) return '';
             
-            // Проверяем специальные типы аудиторий
             const lowerRoom = room.toLowerCase();
             if (lowerRoom.includes('лаб') || 
                 lowerRoom.includes('комп') || 
@@ -629,7 +650,6 @@
                 return room;
             }
             
-            // Для обычных аудиторий добавляем "Ауд."
             return `Ауд. ${room}`;
         }
 
@@ -638,12 +658,15 @@
             const tbody = document.getElementById('schedule-body');
             tbody.innerHTML = '';
             
-            // Если нет временных слотов, используем стандартные
-            const timeSlots = scheduleData.timeSlots.size > 0 
-                ? Array.from(scheduleData.timeSlots).sort() 
-                : ['08:00 - 09:30', '09:45 - 11:15', '11:30 - 13:00', '13:30 - 15:00', '15:15 - 16:45'];
+            const defaultTimeSlots = [
+                '08:00 - 09:30',
+                '09:45 - 11:15',
+                '11:30 - 13:00',
+                '13:30 - 15:00',
+                '15:15 - 16:45'
+            ];
             
-            timeSlots.forEach(timeSlot => {
+            defaultTimeSlots.forEach(timeSlot => {
                 const row = document.createElement('tr');
                 const timeCell = document.createElement('td');
                 timeCell.className = 'schedule-time';
@@ -661,11 +684,21 @@
             });
         }
 
-        // Инициализация
+        // Вспомогательная функция для капитализации строк
+        function capitalizeFirstLetter(string) {
+            return string.split(' ').map(word => 
+                word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+            ).join(' ');
+        }
+
+        // Инициализация с автоматическим обновлением каждые 5 минут
         document.addEventListener('DOMContentLoaded', () => {
             loadSchedule();
             
             document.getElementById('group').addEventListener('change', displaySchedule);
+            
+            // Автоматическое обновление расписания каждые 5 минут
+            setInterval(loadSchedule, 5 * 60 * 1000);
             
             // Фиксированный хедер при скролле
             let lastScroll = 0;
