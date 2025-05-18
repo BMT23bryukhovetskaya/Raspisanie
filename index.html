@@ -534,6 +534,7 @@
                         .map(line => line.trim())
                         .filter(line => line && line.includes('|') && !line.startsWith('---'));
                     
+                    // Сохраняем все уроки для этого дня и группы
                     scheduleData.lessons[groupName][dayName] = lessonLines.map(line => {
                         const parts = line.split('|').map(part => part.trim());
                         if (parts.length < 4) return null;
@@ -600,6 +601,7 @@
             
             const today = new Date().getDay() - 1; // 0-5 (Пн-Сб)
             
+            // Создаем строки для каждого временного слота
             timeSlots.forEach(timeSlot => {
                 const row = document.createElement('tr');
                 
@@ -619,14 +621,30 @@
                     ) || [];
                     
                     if (lessons.length > 0) {
-                        const lesson = lessons[0];
-                        cell.innerHTML = `
-                            <div class="lesson">
+                        // Создаем контейнер для всех уроков в этой ячейке
+                        const lessonsContainer = document.createElement('div');
+                        lessonsContainer.className = 'lessons-container';
+                        
+                        // Добавляем каждый урок в ячейку
+                        lessons.forEach((lesson, index) => {
+                            const lessonDiv = document.createElement('div');
+                            lessonDiv.className = 'lesson';
+                            if (index > 0) {
+                                lessonDiv.style.marginTop = '10px';
+                                lessonDiv.style.paddingTop = '10px';
+                                lessonDiv.style.borderTop = '1px dashed #eee';
+                            }
+                            
+                            lessonDiv.innerHTML = `
                                 <div class="lesson-name">${lesson.subject}</div>
                                 <div class="lesson-teacher">${lesson.teacher}</div>
                                 <div class="lesson-room">${formatRoom(lesson.room)}</div>
-                            </div>
-                        `;
+                            `;
+                            
+                            lessonsContainer.appendChild(lessonDiv);
+                        });
+                        
+                        cell.appendChild(lessonsContainer);
                     } else {
                         cell.className = 'empty-cell';
                         cell.textContent = '—';
