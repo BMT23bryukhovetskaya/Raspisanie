@@ -466,7 +466,7 @@
             nav.classList.toggle('active');
         });
 
-        // Основной объект для хранения данных расписания
+        // Основные данные расписания
         const scheduleData = {
             groups: new Set(),
             days: ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота'],
@@ -505,9 +505,11 @@
             scheduleData.timeSlots.clear();
             scheduleData.lessons = {};
 
-            // Разбиваем на дни
-            const daySections = text.split(/=== ([^=]+) ===/).slice(1);
+            // Разбиваем текст по дням недели
+            const dayRegex = /=== (Понедельник|Вторник|Среда|Четверг|Пятница|Суббота) ===/g;
+            const daySections = text.split(dayRegex).slice(1);
             
+            // Обрабатываем каждый день
             for (let i = 0; i < daySections.length; i += 2) {
                 const dayName = daySections[i].trim();
                 const content = daySections[i+1];
@@ -515,39 +517,43 @@
                 if (!scheduleData.days.includes(dayName)) continue;
                 
                 // Разбиваем на группы
-                const groupSections = content.split(/Группа:\s*(.+)/).slice(1);
+                const groupRegex = /Группа:\s*([^\n]+)/g;
+                let groupMatch;
+                let lastIndex = 0;
                 
-                for (let j = 0; j < groupSections.length; j += 2) {
-                    const groupName = groupSections[j].trim();
-                    const lessonsText = groupSections[j+1];
-                    
-                    if (!groupName) continue;
-                    
+                while ((groupMatch = groupRegex.exec(content)) !== null) {
+                    const groupName = groupMatch[1].trim();
                     scheduleData.groups.add(groupName);
                     
                     if (!scheduleData.lessons[groupName]) {
                         scheduleData.lessons[groupName] = {};
                     }
                     
-                    // Обрабатываем уроки
-                    const lessons = lessonsText.trim().split('\n')
-                        .filter(line => line.includes('|'))
-                        .map(line => {
-                            const parts = line.split('|').map(p => p.trim());
-                            if (parts.length < 4) return null;
-                            
-                            const time = parts[0];
-                            const subject = parts[1];
-                            const room = parts[2];
-                            const teacher = parts[3];
-                            
-                            scheduleData.timeSlots.add(time);
-                            
-                            return { time, subject, room, teacher };
-                        })
-                        .filter(lesson => lesson !== null);
+                    // Получаем текст с уроками для этой группы
+                    const lessonsStart = groupMatch.index + groupMatch[0].length;
+                    let lessonsEnd = content.indexOf('Группа:', lessonsStart);
+                    if (lessonsEnd === -1) lessonsEnd = content.length;
                     
-                    scheduleData.lessons[groupName][dayName] = lessons;
+                    const lessonsText = content.slice(lessonsStart, lessonsEnd);
+                    
+                    // Обрабатываем уроки
+                    const lessonLines = lessonsText.split('\n')
+                        .map(line => line.trim())
+                        .filter(line => line && line.includes('|') && !line.startsWith('---'));
+                    
+                    scheduleData.lessons[groupName][dayName] = lessonLines.map(line => {
+                        const parts = line.split('|').map(part => part.trim());
+                        if (parts.length < 4) return null;
+                        
+                        const time = parts[0];
+                        const subject = parts[1];
+                        const room = parts[2];
+                        const teacher = parts[3];
+                        
+                        scheduleData.timeSlots.add(time);
+                        
+                        return { time, subject, room, teacher };
+                    }).filter(lesson => lesson !== null);
                 }
             }
         }
@@ -606,7 +612,7 @@
                 return;
             }
             
-            // Используем стандартные временные слоты или найденные в файле
+            // Используем временные слоты из данных или стандартные
             const timeSlotsToUse = scheduleData.timeSlots.size > 0 
                 ? Array.from(scheduleData.timeSlots).sort() 
                 : defaultTimeSlots;
