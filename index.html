@@ -196,7 +196,7 @@
 
         .schedule-days {
             display: grid;
-            grid-template-columns: 120px repeat(5, 1fr);
+            grid-template-columns: 120px repeat(6, 1fr); /* 6 дней недели */
             gap: 1px;
             background-color: #ddd;
         }
@@ -340,7 +340,7 @@
         /* Responsive */
         @media (max-width: 992px) {
             .schedule-days {
-                grid-template-columns: 100px repeat(5, 1fr);
+                grid-template-columns: 100px repeat(6, 1fr);
             }
         }
 
@@ -460,6 +460,7 @@
                     <div class="schedule-header">Среда</div>
                     <div class="schedule-header">Четверг</div>
                     <div class="schedule-header">Пятница</div>
+                    <div class="schedule-header">Суббота</div>
 
                     <!-- Расписание будет заполнено динамически -->
                 </div>
@@ -493,6 +494,7 @@
         // Парсинг файла с расписанием
         let scheduleData = {};
         let groups = new Set();
+        let allTimeSlots = new Set();
 
         // Функция для загрузки и парсинга файла с расписанием
         async function loadSchedule() {
@@ -501,6 +503,13 @@
                 const text = await response.text();
                 parseSchedule(text);
                 updateGroupSelector();
+                
+                // Показываем расписание для первой группы, если она есть
+                if (groups.size > 0) {
+                    const firstGroup = Array.from(groups)[0];
+                    document.getElementById('group').value = firstGroup;
+                    displayScheduleForGroup(firstGroup);
+                }
             } catch (error) {
                 console.error('Ошибка загрузки расписания:', error);
                 // Если файл не загружается, используем тестовые данные
@@ -508,28 +517,42 @@
 
 Группа: 409
 --------------------------------------------------
-09:00 - 10:30 | Матем | 1.4 | Белицкая
-10:45 - 12:15 | Физра | Спортзал | Иванов
+09:00 - 10:30 | Математика | 1.4 | Белицкая А.П.
+10:45 - 12:15 | Физическая культура | Спортзал | Иванов С.В.
 
 Группа: 408
 --------------------------------------------------
-09:00 - 10:30 | Русский | 2.1 | Петрова
-10:45 - 12:15 | История | 3.2 | Сидоров
+09:00 - 10:30 | Русский язык | 2.1 | Петрова Е.И.
+10:45 - 12:15 | История | 3.2 | Сидоров О.Н.
 
 === ВТОРНИК ===
 
 Группа: 409
 --------------------------------------------------
-09:00 - 10:30 | Физика | Лаб. 1 | Кузнецов
-10:45 - 12:15 | Химия | Лаб. 2 | Васильева
+09:00 - 10:30 | Физика | Лаб. 1 | Кузнецов В.М.
+10:45 - 12:15 | Химия | Лаб. 2 | Васильева Т.С.
 
 Группа: 408
 --------------------------------------------------
-09:00 - 10:30 | Литера | 2.3 | Николаева
-10:45 - 12:15 | Биология | Лаб. 3 | Федорова`;
+09:00 - 10:30 | Литература | 2.3 | Николаева Л.М.
+10:45 - 12:15 | Биология | Лаб. 3 | Федорова Г.А.
+
+=== СУББОТА ===
+
+Группа: 409
+--------------------------------------------------
+09:00 - 10:30 | Информатика | Комп. класс 1 | Смирнов Д.В.
+10:45 - 12:15 | Иностранный язык | 1.5 | Ковалева М.И.`;
                 
                 parseSchedule(testData);
                 updateGroupSelector();
+                
+                // Показываем расписание для первой группы
+                if (groups.size > 0) {
+                    const firstGroup = Array.from(groups)[0];
+                    document.getElementById('group').value = firstGroup;
+                    displayScheduleForGroup(firstGroup);
+                }
             }
         }
 
@@ -562,12 +585,14 @@
                     } else if (line.includes('|') && currentGroup) {
                         const parts = line.split('|').map(part => part.trim());
                         if (parts.length >= 4) {
-                            scheduleData[currentGroup][dayName].push({
+                            const lesson = {
                                 time: parts[0],
                                 subject: parts[1],
                                 room: parts[2],
                                 teacher: parts[3]
-                            });
+                            };
+                            scheduleData[currentGroup][dayName].push(lesson);
+                            allTimeSlots.add(parts[0]);
                         }
                     }
                 }
@@ -597,38 +622,39 @@
             const scheduleDays = document.querySelector('.schedule-days');
             
             // Очищаем существующее расписание, кроме заголовков
-            while (scheduleDays.children.length > 6) {
+            while (scheduleDays.children.length > 7) { // 7 заголовков (время + 6 дней)
                 scheduleDays.removeChild(scheduleDays.lastChild);
             }
             
             if (!group || !scheduleData[group]) {
                 // Если группа не выбрана или нет данных, показываем пустую таблицу
-                for (let i = 0; i < 5; i++) { // 5 временных слотов
+                const sortedTimeSlots = Array.from(allTimeSlots).sort((a, b) => {
+                    const timeA = new Date(`1970-01-01 ${a.split(' - ')[0]}`);
+                    const timeB = new Date(`1970-01-01 ${b.split(' - ')[0]}`);
+                    return timeA - timeB;
+                });
+                
+                sortedTimeSlots.forEach(timeSlot => {
                     const timeCell = document.createElement('div');
                     timeCell.className = 'schedule-time';
-                    timeCell.textContent = `${8 + i}:00 - ${9 + i}:30`;
+                    timeCell.textContent = timeSlot;
                     scheduleDays.appendChild(timeCell);
                     
-                    for (let j = 0; j < 5; j++) { // 5 дней недели
+                    // Заполняем ячейки для каждого дня недели
+                    const days = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота'];
+                    
+                    days.forEach(day => {
                         const cell = document.createElement('div');
                         cell.className = 'schedule-cell empty-cell';
                         cell.textContent = '—';
                         scheduleDays.appendChild(cell);
-                    }
-                }
+                    });
+                });
                 return;
             }
             
-            // Определяем временные слоты
-            const timeSlots = new Set();
-            Object.values(scheduleData[group]).forEach(lessons => {
-                lessons.forEach(lesson => {
-                    timeSlots.add(lesson.time);
-                });
-            });
-            
             // Сортируем временные слоты
-            const sortedTimeSlots = Array.from(timeSlots).sort((a, b) => {
+            const sortedTimeSlots = Array.from(allTimeSlots).sort((a, b) => {
                 const timeA = new Date(`1970-01-01 ${a.split(' - ')[0]}`);
                 const timeB = new Date(`1970-01-01 ${b.split(' - ')[0]}`);
                 return timeA - timeB;
@@ -642,7 +668,7 @@
                 scheduleDays.appendChild(timeCell);
                 
                 // Заполняем ячейки для каждого дня недели
-                const days = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница'];
+                const days = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота'];
                 
                 days.forEach(day => {
                     const cell = document.createElement('div');
@@ -667,7 +693,9 @@
                         
                         const roomDiv = document.createElement('div');
                         roomDiv.className = 'lesson-room';
-                        roomDiv.textContent = `Ауд. ${lesson.room}`;
+                        roomDiv.textContent = lesson.room.startsWith('Лаб.') || lesson.room.startsWith('Спортзал') || 
+                                             lesson.room.startsWith('Комп. класс') ? 
+                                             lesson.room : `Ауд. ${lesson.room}`;
                         
                         lessonDiv.appendChild(nameDiv);
                         lessonDiv.appendChild(teacherDiv);
@@ -692,7 +720,7 @@
             const days = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота', 'Воскресенье'];
             const today = new Date().getDay() - 1; // 0-6, где 0 - понедельник
             
-            if (today >= 0 && today < 5) { // Только рабочие дни
+            if (today >= 0 && today < 6) { // Только рабочие дни + суббота
                 const dayName = days[today];
                 const dayIndex = days.indexOf(dayName);
                 
@@ -701,7 +729,7 @@
                     const allCells = document.querySelectorAll('.schedule-days > div');
                     let columnIndex = dayIndex + 1; // +1 потому что первый столбец - время
                     
-                    for (let i = 6; i < allCells.length; i += 6) { // 6 столбцов (время + 5 дней)
+                    for (let i = 7; i < allCells.length; i += 7) { // 7 столбцов (время + 6 дней)
                         const cell = allCells[i + columnIndex];
                         if (cell) {
                             cell.classList.add('current-day');
@@ -711,27 +739,15 @@
             }
         }
 
-        // Выбор группы
-        const groupSelect = document.getElementById('group');
-        
-        groupSelect.addEventListener('change', () => {
-            const group = groupSelect.value;
-            displayScheduleForGroup(group);
-        });
-
         // Инициализация при загрузке страницы
         document.addEventListener('DOMContentLoaded', () => {
             // Загружаем расписание
             loadSchedule();
             
-            // Показываем расписание для первой группы, если она есть
-            groupSelect.addEventListener('change', () => {
-                const group = groupSelect.value;
-                displayScheduleForGroup(group);
+            // Обработчик изменения выбора группы
+            document.getElementById('group').addEventListener('change', function() {
+                displayScheduleForGroup(this.value);
             });
-            
-            // Показываем текущий день
-            highlightCurrentDay();
             
             // Фиксированный хедер при скролле
             let lastScroll = 0;
@@ -742,7 +758,7 @@
                 
                 if (currentScroll <= 0) {
                     header.style.transform = 'translateY(0)';
-                } else if (currentScroll > lastScroll) {
+                } else if (currentScroll > lastScroll && currentScroll > 100) {
                     header.style.transform = 'translateY(-100%)';
                 } else {
                     header.style.transform = 'translateY(0)';
