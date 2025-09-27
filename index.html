@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Расписание занятий — БМТ</title>
+  <meta name="description" content="Расписание занятий ГБПОУ КК \"Брюховецкий многопрофильный техникум\"">
+  <style>
+    :root {
+      --bmt-primary: #0b5e2e; /* тёмно‑зелёный */
+      --bmt-secondary: #0b4f8a; /* тёмно‑синий */
+      --bmt-accent: #f0b429; /* золотой */
+      --bmt-bg: #f6f8f9;
+      --bmt-surface: #ffffff;
+      --bmt-text: #1f2937;
+      --bmt-muted: #6b7280;
+      --radius: 12px;
+      --shadow: 0 10px 30px rgba(0,0,0,0.08);
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body { background: var(--bmt-bg); color: var(--bmt-text); font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+    .header {
+      background: linear-gradient(120deg, var(--bmt-primary), var(--bmt-secondary));
+      color: #fff; padding: 32px 20px 24px; box-shadow: var(--shadow);
+    }
+    .header__inner { max-width: 1100px; margin: 0 auto; display: flex; align-items: center; gap: 18px; }
+    .logo { width: 56px; height: 56px; border-radius: 14px; background: rgba(255,255,255,0.15); display: grid; place-items: center; font-weight: 800; letter-spacing: .5px; }
+    .brand h1 { margin: 0; font-size: 22px; line-height: 1.3; font-weight: 800; }
+    .brand p { margin: 4px 0 0; opacity: .9; font-size: 13px; }
+    .container { max-width: 1100px; margin: 18px auto; padding: 0 20px 40px; }
+    .panel { background: var(--bmt-surface); border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px; }
+    .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+    .row + .row { margin-top: 12px; }
+    .field { display: grid; gap: 6px; }
+    label { font-size: 12px; color: var(--bmt-muted); }
+    select, button { height: 40px; border-radius: 10px; border: 1px solid #e5e7eb; background: #fff; padding: 0 12px; font-size: 14px; }
+    button { background: var(--bmt-primary); color: #fff; border: none; padding: 0 14px; cursor: pointer; }
+    button.alt { background: var(--bmt-secondary); }
+    button.ghost { background: transparent; color: var(--bmt-primary); border: 1px solid var(--bmt-primary); }
+    button:disabled { opacity: .55; cursor: not-allowed; }
+    .tabs { display: flex; gap: 8px; flex-wrap: wrap; }
+    .tab { background: #fff; color: var(--bmt-secondary); border: 1px solid #e5e7eb; padding: 8px 12px; border-radius: 10px; cursor: pointer; font-weight: 600; }
+    .tab.active { background: var(--bmt-secondary); color: #fff; border-color: var(--bmt-secondary); }
+    .meta { margin-left: auto; color: var(--bmt-muted); font-size: 13px; }
+    .table { margin-top: 16px; overflow: hidden; border-radius: 12px; border: 1px solid #e5e7eb; background: #fff; }
+    table { width: 100%; border-collapse: collapse; }
+    thead th { text-align: left; background: #f3f4f6; color: #374151; padding: 12px 12px; font-size: 13px; }
+    tbody td { padding: 12px; border-top: 1px solid #f0f0f0; vertical-align: top; }
+    tbody tr:hover { background: #fafafa; }
+    .badge { display: inline-block; background: rgba(11,94,46,.12); color: var(--bmt-primary); padding: 2px 8px; border-radius: 999px; font-size: 12px; }
+    .footer { color: var(--bmt-muted); text-align: center; font-size: 13px; padding: 20px; }
+    .empty { text-align: center; color: var(--bmt-muted); padding: 20px; }
+  </style>
+</head>
+<body>
+  <header class="header">
+    <div class="header__inner">
+      <div class="logo">БМТ</div>
+      <div class="brand">
+        <h1>ГБПОУ КК «Брюховецкий многопрофильный техникум»</h1>
+        <p>Расписание занятий</p>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="panel">
+      <div class="row">
+        <div class="field">
+          <label for="groupSelect">Группа</label>
+          <select id="groupSelect"></select>
+        </div>
+        <div class="field" style="flex:1 1 auto; min-width: 240px;">
+          <label>День недели</label>
+          <div class="tabs" id="dayTabs"></div>
+        </div>
+        <div class="meta" id="updatedAt"></div>
+        <div class="field" style="margin-left:auto;">
+          <label>&nbsp;</label>
+          <div class="row">
+            <button class="ghost" id="printBtn">Печать</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="table" id="tableWrap">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:56px">№</th>
+              <th style="width:120px">Время</th>
+              <th>Предмет</th>
+              <th style="width:220px">Преподаватель</th>
+              <th style="width:120px">Кабинет</th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+      <div class="empty" id="emptyState" style="display:none">Нет данных для отображения</div>
+    </section>
+    <div class="footer">Если расписание не загрузилось, сохраните его в файле <span class="badge">schedule.json</span> (приложение «zapolnenie.py») — сайт возьмёт данные автоматически.</div>
+  </main>
+
+  <!-- Данные расписания (создаются приложением zapolnenie.py) -->
+  <script src="schedule.js"></script>
+  <script>
+    const DAY_NAMES = ["Понедельник","Вторник","Среда","Четверг","Пятница","Суббота","Воскресенье"];
+    const DEFAULT_SCHEDULE = {
+      schemaVersion: "bmt_schedule_v1",
+      institute: "ГБПОУ КК \"Брюховецкий многопрофильный техникум\"",
+      updatedAt: null,
+      groups: []
+    };
+
+    const S = window.BMT_SCHEDULE && window.BMT_SCHEDULE.schemaVersion ? window.BMT_SCHEDULE : DEFAULT_SCHEDULE;
+    const groupSelect = document.getElementById('groupSelect');
+    const dayTabs = document.getElementById('dayTabs');
+    const tbody = document.getElementById('tbody');
+    const emptyState = document.getElementById('emptyState');
+    const updatedAt = document.getElementById('updatedAt');
+    const printBtn = document.getElementById('printBtn');
+
+    let currentDayIndex = (() => {
+      const jsDay = new Date().getDay(); // 0..6, где 1=Пн
+      return jsDay === 0 ? 6 : jsDay - 1; // 0..6 (Пн..Вс)
+    })();
+
+    function renderGroups() {
+      groupSelect.innerHTML = '';
+      (S.groups || []).forEach((g, i) => {
+        const opt = document.createElement('option');
+        opt.value = i;
+        opt.textContent = g.name;
+        groupSelect.appendChild(opt);
+      });
+      if (!S.groups || S.groups.length === 0) {
+        const opt = document.createElement('option');
+        opt.value = '';
+        opt.textContent = '— нет групп —';
+        groupSelect.appendChild(opt);
+        groupSelect.disabled = true;
+      } else {
+        groupSelect.disabled = false;
+      }
+    }
+
+    function renderDayTabs() {
+      dayTabs.innerHTML = '';
+      DAY_NAMES.slice(0,6).forEach((name, idx) => {
+        const btn = document.createElement('button');
+        btn.className = 'tab' + (idx === currentDayIndex ? ' active' : '');
+        btn.textContent = name;
+        btn.addEventListener('click', () => {
+          currentDayIndex = idx;
+          renderDayTabs();
+          renderTable();
+        });
+        dayTabs.appendChild(btn);
+      });
+    }
+
+    function renderMeta() {
+      updatedAt.textContent = S.updatedAt ? `Обновлено: ${new Date(S.updatedAt).toLocaleString('ru-RU')}` : '';
+    }
+
+    function renderTable() {
+      tbody.innerHTML = '';
+      const groupIdx = parseInt(groupSelect.value, 10);
+      const hasGroups = (S.groups || []).length > 0;
+      const lessons = hasGroups ? (((S.groups[groupIdx] || {}).days || {})[currentDayIndex] || []) : [];
+      emptyState.style.display = (!hasGroups || lessons.length === 0) ? 'block' : 'none';
+      if (!hasGroups) return;
+      lessons.forEach((lesson, i) => {
+        const tr = document.createElement('tr');
+        const to = (v) => v == null ? '' : String(v);
+        const time = [to(lesson.startTime), to(lesson.endTime)].filter(Boolean).join('–');
+        tr.innerHTML = `
+          <td>${i + 1}</td>
+          <td>${time}</td>
+          <td><strong>${to(lesson.subject)}</strong></td>
+          <td>${to(lesson.teacher)}</td>
+            <td>${to(lesson.room)}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    groupSelect.addEventListener('change', renderTable);
+    printBtn.addEventListener('click', () => window.print());
+
+    // Инициализация
+    renderGroups();
+    if (groupSelect.options.length > 0) groupSelect.selectedIndex = 0;
+    renderDayTabs();
+    renderMeta();
+    renderTable();
+  </script>
+</body>
+</html>
+
+
